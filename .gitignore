@@ -3,9 +3,10 @@
 # Agent / runtime logs (OMC subtask output, etc.)
 .logs/
 
-# Agent orchestration scratch (OMC `.agents/` stubs). The project's authoritative
-# agent state lives in AGENT_STATE.md / EVIDENCE.md / OPEN_QUESTIONS.md at root.
-.agents/
+# OMC per-session orchestration stubs (managed by the OMC system; high churn).
+# Durable project state in .agents/ IS tracked (evidence.md, open_questions.md).
+.agents/current_status.md
+.agents/next_steps.md
 
 # Windows download artifacts
 *:Zone.Identifier

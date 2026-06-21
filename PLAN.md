@@ -274,7 +274,7 @@ EV-AUDIT   Audit trail or activity ledger evidence
 
 ### Evidence record format
 
-Add one evidence record per completed slice in `EVIDENCE.md`.
+Add one evidence record per completed slice in `.agents/evidence.md`.
 
 ````markdown
 ## EV-{{ID}} — {{TITLE}}
@@ -390,8 +390,8 @@ Owns:
 * `SPEC.md`
 * `PLAN.md`
 * `AGENT_STATE.md`
-* `EVIDENCE.md`
-* `OPEN_QUESTIONS.md`
+* `.agents/evidence.md`
+* `.agents/open_questions.md`
 * `CHANGELOG.md`
 * Shared command list
 
@@ -1646,8 +1646,8 @@ Use these files:
 
 ```text
 AGENT_STATE.md
-EVIDENCE.md
-OPEN_QUESTIONS.md
+.agents/evidence.md
+.agents/open_questions.md
 CHANGELOG.md
 ```
 
@@ -1669,7 +1669,7 @@ Rules:
 - Do not implement behavior outside these IDs.
 - Write or update the test first when behavior is known.
 - Run the verification commands.
-- Record evidence in EVIDENCE.md.
+- Record evidence in .agents/evidence.md.
 - Update AGENT_STATE.md with next task or blocker.
 - If the spec is ambiguous, add an OPEN_QUESTION and stop this slice.
 - Do not mark the task complete without evidence.
@@ -2464,7 +2464,7 @@ Read:
 - SPEC.md
 - PLAN.md
 - AGENT_STATE.md
-- OPEN_QUESTIONS.md
+- .agents/open_questions.md
 
 Current slice:
 {{SLICE_ID}} — {{TITLE}}
@@ -2485,7 +2485,7 @@ Do:
 1. Write or update the test first if behavior is known.
 2. Implement only this slice.
 3. Run required verification commands.
-4. Record evidence in EVIDENCE.md.
+4. Record evidence in .agents/evidence.md.
 5. Update AGENT_STATE.md.
 6. Stop if ambiguity, invariant failure, or shared contract change is required.
 

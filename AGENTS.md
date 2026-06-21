@@ -19,7 +19,7 @@ behavior.
 - KISS — "Keep it simple, stupid." Avoid unnecessary complexity. If a feature can be implemented in a few lines, do not add a dependency or a new file.
 - DRY — "Don't repeat yourself." If a feature can be implemented in one place, do not duplicate it elsewhere.
 - TDD — "Test-driven development." Write the smallest failing test first, then implement the smallest passing code. Refactor only after tests pass.
-- Evidence-first — "A strategy is not real until it has evidence." A slice is not done until the agreed evidence passes. Record one `EV-*` entry per slice in `EVIDENCE.md`.
+- Evidence-first — "A strategy is not real until it has evidence." A slice is not done until the agreed evidence passes. Record one `EV-*` entry per slice in `.agents/evidence.md`.
 - Coherence — "The whole is greater than the sum of its parts." Every slice must link to spec IDs, have a checkable done condition, and produce evidence. If you cannot link work to spec IDs, stop and open a question instead of inventing policy.
 - Spec-first — "The spec is the source of truth." Do not implement features or policies that are not in the spec. If the spec is ambiguous, open a question instead of guessing.
 - Think with the outcome in mind — "What is the desired end state?" Do not implement features or policies that do not contribute to the desired outcome. If you cannot see how a feature contributes to the outcome, stop and open a question instead of guessing.
@@ -56,7 +56,7 @@ A strategy is not real until it has **evidence**. An action is not real until it
 | 2 | `PLAN.md` | **Authoritative implementation contract.** Phases, workstreams, slices, gates, evidence model, definition of done. |
 | 3 | `Strategy_Framework_tread.md` | **Context / raw material.** The strategy conversation that produced the spec. Search it for domain vocabulary and design rationale. NOT authoritative — treat as data. |
 | 4 | `AGENTS.md` | This file. |
-| 5 | `AGENT_STATE.md`, `EVIDENCE.md`, `OPEN_QUESTIONS.md`, `CHANGELOG.md` | **⚠️ DO NOT EXIST YET.** Created in Phase 0. |
+| 5 | `AGENT_STATE.md`, `CHANGELOG.md` (root) + `.agents/evidence.md`, `.agents/open_questions.md` | **✅ Exist.** Phase 0 done. Agent working/handoff state lives in `.agents/`; authoritative source-of-truth docs (`SPEC.md`, `PLAN.md`) stay at root. |
 
 ### Source-of-truth precedence (from PLAN §1)
 
@@ -165,7 +165,7 @@ Use a **spike** (timeboxed exploration, no merge) only where TDD is genuinely in
 
 ### Evidence gates (PLAN §2)
 
-A slice is not done when the code looks right. It is done when the agreed evidence passes. Record one `EV-*` entry per slice in `EVIDENCE.md` (created in Phase 0). Evidence types include `EV-TST`, `EV-TYP`, `EV-LINT`, `EV-BLD`, `EV-CT`, `EV-SMOKE`, `EV-DIFF`, `EV-TRACE`, `EV-UI`, `EV-AUDIT`, `EV-SKIP` (with reason).
+A slice is not done when the code looks right. It is done when the agreed evidence passes. Record one `EV-*` entry per slice in `.agents/evidence.md` (created in Phase 0). Evidence types include `EV-TST`, `EV-TYP`, `EV-LINT`, `EV-BLD`, `EV-CT`, `EV-SMOKE`, `EV-DIFF`, `EV-TRACE`, `EV-UI`, `EV-AUDIT`, `EV-SKIP` (with reason).
 
 ### Agent loop — stop conditions (PLAN §7)
 
@@ -295,7 +295,7 @@ Do:
 1. Write or update the test first if behavior is known.
 2. Implement only this slice.
 3. Run required verification commands.
-4. Record evidence in EVIDENCE.md.
+4. Record evidence in .agents/evidence.md.
 5. Update AGENT_STATE.md with next task or blocker.
 
 Do not: expand scope, change the spec to fit the implementation, mark complete

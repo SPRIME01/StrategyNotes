@@ -684,7 +684,7 @@ Pass condition: notes → evidence → strategy → decision → work package �
 
 ## 14. Open questions
 
-Tracked in full in `PLAN.md` §11 and `OPEN_QUESTIONS.md` (created Phase 0). Summary with recommended MVP choices:
+Tracked in full in `PLAN.md` §11 and `.agents/open_questions.md` (created Phase 0). Summary with recommended MVP choices:
 
 | ID | Topic | Recommended MVP choice |
 |----|---|---|

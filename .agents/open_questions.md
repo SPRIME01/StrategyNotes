@@ -1,4 +1,4 @@
-# OPEN_QUESTIONS.md
+# open_questions.md
 
 Open questions for the StrategyNotes project. Format per PLAN sec 11.
 Status legend: Open / Pending decision / Resolved (with date + decision).

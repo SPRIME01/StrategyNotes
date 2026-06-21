@@ -1,4 +1,4 @@
-# EVIDENCE.md
+# evidence.md
 
 One EV-* record per completed slice. Format per PLAN sec 2. A slice is not done
 when the code looks right — it is done when the agreed evidence passes.

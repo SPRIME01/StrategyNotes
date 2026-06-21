@@ -18,7 +18,7 @@ S-PHASE0-001 — Workspace scaffold + harness (core + ui + state files)
   (`Clock`), one pure domain fn (`time::daynote_header`), exercised via a fake
   adapter in `core/tests/smoke.rs`. `cargo test` green.
 - pnpm workspace with `ui/` (React 18 + TS + Vite + Vitest). `pnpm test` green.
-- State files present (this file + EVIDENCE/OPEN_QUESTIONS/CHANGELOG).
+- State files present: this file + `CHANGELOG.md` at root; `evidence.md` + `open_questions.md` in `.agents/`.
 - AGENTS.md sec 9 commands filled in with real values.
 
 ## Next action
