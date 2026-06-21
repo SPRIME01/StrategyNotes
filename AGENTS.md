@@ -4,7 +4,7 @@ Orientation file for any agent (human or AI) working in this repo. Read this bef
 
 ---
 
-## Normative Lana
+## Normative Language
 
 The key words MUST, MUST NOT, REQUIRED, SHOULD, SHOULD NOT, RECOMMENDED, MAY, and
 OPTIONAL in this document are to be interpreted as described in RFC 2119.
@@ -26,6 +26,7 @@ behavior.
 - Portability — No hard-coded paths, no SQLite-only state, no platform-specific assumptions. Strategy-critical data must stay portable and inspectable in markdown. Strategy-critical relationships must be reconstructable from markdown/frontmatter — never SQLite-only. Configuration-based, not hard-coded. No assumptions about the host OS, file system, or calendar provider. If you cannot implement a feature in a portable way, stop and open a question instead of guessing.
 - No silent failures — "Fail fast, fail loud." If an invariant test fails, stop and open a question instead of guessing. If a slice is verified, stop and record evidence instead of guessing. If a shared contract change is required, stop and open a question instead of guessing. If the same test fails twice with no new information, stop and open a question instead of guessing.
 - No todo comments or placeholders — "If it's not done, it's not done." Do not leave todo comments in the code. If a feature is not implemented, stop and open a question instead of guessing. If a slice is not verified, stop and record evidence instead of guessing. If a shared contract change is required, stop and open a question instead of guessing. If the same test fails twice with no new information, stop and open a question instead of guessing.
+- MUST implement structure before behavior — "First make it compile, then make it work." Do not implement behavior before the necessary structure is in place. If you cannot implement a feature because the structure is not in place, stop and open a question instead of guessing.
 
 ## 1. What this is
 
@@ -255,11 +256,11 @@ Plus PLAN §1 pre-seeds OQ-006..010 (node grouping, plan/exec UX boundary, edit 
 **Phase 0 not yet scaffolded — no build/test/typecheck commands exist.** Once Phase 0 lands, this section is the canonical command list every agent must use. Placeholders:
 
 ```
-build:      TBD   (likely `pnpm build` + `cargo build` via Tauri)
-test:       TBD   (Rust: `cargo test`; frontend: `pnpm test`)
-typecheck:  TBD   (`pnpm typecheck` / `cargo check`)
-lint:       TBD   (`pnpm lint` / `cargo clippy`)
-rebuild:    TBD   (wipe SQLite, rebuild from markdown — INV-DUR smoke test)
+build:      cargo build --workspace && pnpm -C ui build
+test:       cargo test --workspace && pnpm -C ui test
+typecheck:  cargo check --workspace && pnpm -C ui typecheck
+lint:       (Phase 1+) cargo clippy --workspace && pnpm -C ui lint
+rebuild:    (Phase 3) wipe SQLite, rebuild from markdown — INV-DUR smoke test
 ```
 
 ---
@@ -279,7 +280,6 @@ rebuild:    TBD   (wipe SQLite, rebuild from markdown — INV-DUR smoke test)
 
 ## 11. Minimal agent brief (copy-paste template)
 
-```
 You are implementing StrategyNotes. Read AGENTS.md, then SPEC.md, then PLAN.md.
 
 Current slice: {SLICE_ID} — {TITLE}
@@ -305,4 +305,12 @@ without pomo + timebox.
 
 Stop when: slice verified, OR ambiguity (open a question), OR invariant fails,
 OR shared contract change required, OR same test fails twice with no new info.
-```
+
+## 12. Local Memory (MUST READ AND UPDATE BEFORE DOING ANYTHING)
+
+- Keep .agents/current_status.md updated with your current slice, relevant IDs, and blockers.
+- Keep .agents/next_steps.md updated with your next task or open question. These are for human review and handoff; they are not a source of truth.
+- Write plans in .agents/plans.md for work that spans multiple slices or has complex dependencies.
+- Always link to spec IDs in your plans.
+- Use .agents/lessons/ to record insights from challenges, and decisions that don't fit in the spec but are important for future reference to improve the process. Link these to relevant slices and spec IDs.
+- MUST keep all local memory up to date and accurate. If you find yourself thinking "I know this, but I don't want to write it down," stop and open a question instead of guessing. Local memory is for improving agent's own performance and for human handoff; if it's not accurate, it's worse than useless.

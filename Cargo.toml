@@ -1,0 +1,7 @@
+# StrategyNotes cargo workspace.
+# The hexagonal core lives in `core/`. Adapters (markdown vault, SQLite index,
+# calendar, Tauri shell) arrive in later phases. See SPEC.md sec 3.4.
+
+[workspace]
+resolver = "2"
+members = ["core"]

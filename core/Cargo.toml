@@ -1,0 +1,6 @@
+[package]
+name = "strategynotes-core"
+version = "0.0.0"
+edition = "2021"
+description = "StrategyNotes pure domain core (the hexagon). See SPEC.md sec 3.4."
+publish = false

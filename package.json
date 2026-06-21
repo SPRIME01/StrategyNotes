@@ -1,0 +1,11 @@
+{
+  "name": "strategynotes",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Local-first, markdown-native strategic knowledge and execution system. See SPEC.md.",
+  "packageManager": "pnpm@10.26.2",
+  "scripts": {
+    "test": "pnpm -C ui test",
+    "build": "pnpm -C ui build"
+  }
+}
