@@ -7,8 +7,8 @@
 //! the unknown-key-preservation rule (PLAN sec 2), and deterministic
 //! serialization (PLAN sec 2).
 
-use strategynotes_core::format::{from_markdown, to_markdown};
-use strategynotes_core::{Node, NodeId, NodeType};
+use strategynotes_core::format::{edges_of, from_markdown, set_edges, to_markdown};
+use strategynotes_core::{EdgeType, Node, NodeId, NodeType, TypedEdge};
 
 const SAMPLE: &str = "---\nid: 01HZX8KQBJ9GYWN3QFVYRXTXMS\ntype: strategy_case\nowner: Sam\narena: GodSpeed MVP\n---\n# GodSpeed strategy\n\nBody text here.\n";
 
@@ -91,4 +91,36 @@ fn missing_closing_delimiter_is_rejected() {
     let err = from_markdown(text).unwrap_err();
     let msg = format!("{err}");
     assert!(msg.contains("---"), "error should mention delimiter: {msg}");
+}
+
+#[test]
+fn typed_edges_round_trip_through_frontmatter() {
+    // INV-EDGE: edges reconstructable from frontmatter alone.
+    let mut node = from_markdown("---\nid: 01HZX8KQBJ9GYWN3QFVYRXTXMS\ntype: strategic_claim\n---\nbody\n").unwrap();
+    let target_a = NodeId::parse("01HZX9W3HJ4C2V1DKE8XFNAB63").unwrap();
+    let target_b = NodeId::parse("01HZXA8P2KQ5R7M4XHYNGBTEF1").unwrap();
+    let edges = vec![
+        TypedEdge { from: node.id, to: target_a, edge_type: EdgeType::Supports, status: Default::default() },
+        TypedEdge { from: node.id, to: target_b, edge_type: EdgeType::DerivesFrom, status: Default::default() },
+    ];
+    set_edges(&mut node, &edges).unwrap();
+
+    // Serialize to markdown, reparse, recover edges - reconstructable from text.
+    let md = to_markdown(&node).unwrap();
+    let reparsed = from_markdown(&md).unwrap();
+    let recovered = edges_of(&reparsed).unwrap();
+    assert_eq!(recovered.len(), 2);
+    assert_eq!(recovered[0].to, target_a);
+    assert_eq!(recovered[0].edge_type, EdgeType::Supports);
+    assert_eq!(recovered[1].to, target_b);
+    assert_eq!(recovered[1].edge_type, EdgeType::DerivesFrom);
+    // `from` is filled in as this node's id:
+    assert_eq!(recovered[0].from, node.id);
+}
+
+#[test]
+fn set_edges_with_empty_list_clears_the_key() {
+    let mut node = from_markdown("---\nid: 01HZX8KQBJ9GYWN3QFVYRXTXMS\ntype: note\nedges: []\n---\nb\n").unwrap();
+    set_edges(&mut node, &[]).unwrap();
+    assert!(node.frontmatter.get("edges").is_none());
 }

@@ -3,5 +3,7 @@
 //! hexagonal boundary is at `core/`, not here.
 
 pub mod markdown_vault;
+pub mod sqlite_index;
 
 pub use markdown_vault::MarkdownVault;
+pub use sqlite_index::SQLiteIndex;

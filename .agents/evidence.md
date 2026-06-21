@@ -193,3 +193,68 @@ Remaining gaps:
 - No rebuild-smoke test yet (requires DerivedIndex adapter, Phase 3).
 
 Status: Accepted
+
+---
+
+## EV-003 — Phase 3 SQLite derived index + INV-DUR rebuild
+
+Date: 2026-06-21
+Slice: S-INDEX-001 (+ S-STORAGE-002 edge encoding folded in)
+Spec IDs: PRD-004, PRD-005, SDS-INDEX, INV-DUR, INV-EDGE, TST-STORAGE
+
+Commands run:
+```bash
+cargo test --workspace
+```
+
+Result:
+```text
+strategynotes-core:
+  contracts ............ 6 passed
+  smoke ................ 1 passed
+  storage .............. 9 passed  (+2 edge round-trip tests vs EV-002)
+strategynotes-adapters:
+  markdown_vault ....... 7 passed
+  sqlite_index ......... 4 passed
+    - rebuild_indexes_nodes_and_edges
+    - index_loss_then_rebuild_yields_equivalent_state  <- INV-DUR proof
+    - rebuild_is_idempotent
+    - rebuild_after_vault_change_reflects_new_state
+TOTAL: 27 passed, 0 failed
+```
+
+Files added:
+- core/src/naming.rs - public snake_case_name / from_snake_case helpers (keeps
+  adapters free of a direct serde dep).
+- core/src/format.rs - edges_of / set_edges (typed-edge encoding in frontmatter
+  under `edges: [{to, type, status?}]`; INV-EDGE reconstructable from text).
+- adapters/src/sqlite_index.rs - SQLiteIndex: DerivedIndex impl via rusqlite
+  (bundled). Tables: nodes(id, type, body), edges(from_id, to_id, edge_type,
+  status). Mutex<Connection>. rebuild() wipes + re-inserts in one transaction.
+- adapters/tests/sqlite_index.rs - 4 tests including the INV-DUR proof.
+
+The INV-DUR proof (made executable):
+```text
+index_loss_then_rebuild_yields_equivalent_state:
+  1. seed vault with 3 nodes + 2 typed edges
+  2. open SQLiteIndex at <tmp>/index.db, rebuild, capture baseline queries
+  3. close index, DELETE the .db file (simulate index loss)
+  4. reopen fresh SQLiteIndex at same path, rebuild from vault
+  5. assert nodes_by_type / out_edges / backlinks match baseline expectations
+```
+
+Fidelity notes:
+- The index holds NO truth the markdown lacks: it is a pure function of the
+  vault contents at rebuild time. Verified by rebuild_after_vault_change (add/
+  delete a node + rebuild -> index reflects it) and rebuild_is_idempotent.
+- Hexagonal boundary intact: rusqlite lives only in adapters/, never in core/.
+- Edge encoding proven through BOTH the pure format layer (storage.rs tests)
+  AND the indexed queries (sqlite_index.rs tests).
+
+Remaining gaps:
+- Inline [[wikilink]] and #tag parsing from body (INV-BODY) - still deferred.
+- Search/FTS not yet (optional per PLAN sec 3).
+- No corrupt-file-recovery test yet (delete-corrupt-then-rebuild path == the
+  index-loss test; full corruption detection deferred).
+
+Status: Accepted

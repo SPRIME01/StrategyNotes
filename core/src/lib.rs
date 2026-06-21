@@ -19,6 +19,7 @@ pub mod format;
 pub mod gate;
 pub mod governance;
 pub mod identity;
+pub mod naming;
 pub mod node;
 pub mod ports;
 pub mod strategy;

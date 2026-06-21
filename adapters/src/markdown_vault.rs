@@ -94,12 +94,11 @@ impl NodeVault for MarkdownVault {
     }
 
     fn edges_of(&self, id: &NodeId) -> Result<Vec<TypedEdge>, Error> {
-        // ponytail: edge encoding in frontmatter lands in the next Phase 2 slice
-        // (S-STORAGE-002). Returns empty for now; the gate engine (Phase 7) and
-        // trace explorer (Phase 6) consume this via the DerivedIndex, not the
-        // vault directly.
-        let _ = self.get(id)?;
-        Ok(Vec::new())
+        let node = self.get(id)?;
+        match node {
+            Some(n) => format::edges_of(&n),
+            None => Ok(Vec::new()),
+        }
     }
 }
 

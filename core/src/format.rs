@@ -17,7 +17,9 @@
 //! unknown-key-preservation + deterministic-serialization rules.
 
 use crate::error::Error;
-use crate::node::{Node, NodeType};
+use crate::identity::NodeId;
+use crate::node::{EdgeStatus, EdgeType, Node, NodeType, TypedEdge};
+use serde::{Deserialize, Serialize};
 
 /// Parse a markdown document into a [`Node`].
 ///
@@ -123,4 +125,60 @@ pub fn to_markdown(node: &Node) -> Result<String, Error> {
     out.push_str("---\n");
     out.push_str(&node.body);
     Ok(out)
+}
+
+// ---- typed-edge encoding (S-STORAGE-002) ----
+//
+// A node's outgoing edges live in frontmatter under `edges` as a list of
+// {to, type, status?} entries. `from` is implicit (the node itself) so it is
+// not stored. INV-EDGE: reconstructable from frontmatter alone.
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct EdgeEntry {
+    to: String,
+    #[serde(rename = "type")]
+    edge_type: EdgeType,
+    #[serde(default)]
+    status: EdgeStatus,
+}
+
+/// Outgoing typed edges encoded in this node's frontmatter. Reconstructable
+/// from markdown alone (INV-EDGE). `from` is filled in as this node's id.
+pub fn edges_of(node: &Node) -> Result<Vec<TypedEdge>, Error> {
+    let Some(val) = node.frontmatter.get("edges") else {
+        return Ok(Vec::new());
+    };
+    let entries: Vec<EdgeEntry> = serde_yaml::from_value(val.clone())
+        .map_err(|e| Error::Deserialize(format!("'edges': {e}")))?;
+    entries
+        .into_iter()
+        .map(|e| {
+            let to = NodeId::parse(&e.to)?;
+            Ok(TypedEdge {
+                from: node.id,
+                to,
+                edge_type: e.edge_type,
+                status: e.status,
+            })
+        })
+        .collect()
+}
+
+/// Attach (replace) this node's outgoing edges in its frontmatter.
+pub fn set_edges(node: &mut Node, edges: &[TypedEdge]) -> Result<(), Error> {
+    if edges.is_empty() {
+        node.frontmatter.remove("edges");
+        return Ok(());
+    }
+    let entries: Vec<EdgeEntry> = edges
+        .iter()
+        .map(|e| EdgeEntry {
+            to: e.to.to_lexical(),
+            edge_type: e.edge_type,
+            status: e.status,
+        })
+        .collect();
+    let val = serde_yaml::to_value(&entries).map_err(|e| Error::Serialize(e.to_string()))?;
+    node.frontmatter.insert("edges".into(), val);
+    Ok(())
 }
