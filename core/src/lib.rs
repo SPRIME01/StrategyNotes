@@ -12,5 +12,34 @@
 //! Any import of std::fs, rusqlite, reqwest, tokio, or Tauri types inside this
 //! crate is a review-blocker (AGENTS.md sec 10).
 
+pub mod error;
+pub mod evidence;
+pub mod execution;
+pub mod gate;
+pub mod governance;
+pub mod identity;
+pub mod node;
 pub mod ports;
+pub mod strategy;
 pub mod time;
+
+pub use error::Error;
+pub use evidence::{
+    EvidenceItem, EvidenceKind, EvidenceStatus, ProofLevel, Source, SourceChunk,
+};
+pub use execution::{
+    AttentionMode, Completion, DecisionRecord, PomoEstimate, PomoPattern, Timebox,
+    TimeboxReview, TimeboxStatus, ValueClaim, ValueStatus, WorkPackage, WorkStatus,
+};
+pub use gate::{GateId, GateResult};
+pub use governance::{
+    ActivityEvent, ActivityKind, AgentRun, AgentRunStatus, EventSource, OpenQuestion,
+    QuestionStatus, Risk,
+};
+pub use identity::NodeId;
+pub use node::{EdgeStatus, EdgeType, Frontmatter, Node, NodeType, TypedEdge};
+pub use ports::{Clock, DerivedIndex, EventSink, IdMinter, NodeVault};
+pub use strategy::{
+    Assumption, AssumptionStatus, BetStatus, CasePhase, ChoiceCascade, ChoiceLevel,
+    OutcomeRequirement, StrategicClaim, StrategyBet, StrategyCase,
+};

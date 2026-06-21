@@ -4,3 +4,15 @@ version = "0.0.0"
 edition = "2021"
 description = "StrategyNotes pure domain core (the hexagon). See SPEC.md sec 3.4."
 publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+# ponytail: serde_yaml is deprecated by dtolnay but stable; swap to serde_yml if it breaks.
+ulid = { version = "1", features = ["serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2"
+
+[dev-dependencies]
+serde_json = "1"
+

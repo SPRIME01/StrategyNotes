@@ -66,3 +66,68 @@ Remaining gaps:
 - No behavior beyond the smoke functions; this is the harness slice only.
 
 Status: Accepted
+
+---
+
+## EV-001 — Phase 1 shared contracts (EV-TYP + EV-CT)
+
+Date: 2026-06-21
+Slice: S-CONTRACTS-001
+Spec IDs: SDS-NODE, SDS-EVID, SDS-STRAT, SDS-GATE, SDS-AGENT, INV-ID, INV-EDGE, INV-DUR
+
+Commands run:
+```bash
+cargo check --workspace
+cargo test  --workspace
+```
+
+Result:
+```text
+cargo check:  Finished (0 errors)
+cargo test:   7 passed (6 contract + 1 smoke), 0 failed
+  - node_id_roundtrips_lexically
+  - node_id_sorts_lexically             (INV-ID: sortable)
+  - node_serde_roundtrip_preserves_typed_fields
+  - typed_edge_uses_snake_case_edge_type (INV-EDGE: reconstructable shape)
+  - gate_result_blocked_shape_matches_spec (SPEC sec 9)
+  - gate_result_approved_shape_matches_spec (SPEC sec 9)
+  - daynote_header_renders_timestamp_from_clock_port (Phase 0 smoke)
+```
+
+Files added (core/src/):
+- identity.rs (NodeId - ULID-backed, parse/display, no minting in core)
+- node.rs (Node, NodeType x34, Frontmatter=BTreeMap for unknown-key preservation,
+  TypedEdge, EdgeType x17, EdgeStatus)
+- evidence.rs (Source, SourceChunk, EvidenceItem, ProofLevel x8, EvidenceStatus,
+  EvidenceKind)
+- strategy.rs (StrategyCase + CasePhase, OutcomeRequirement, StrategicClaim,
+  Assumption, ChoiceCascade + ChoiceLevel, StrategyBet + BetStatus)
+- execution.rs (WorkPackage + WorkStatus, PomoEstimate, PomoPattern, AttentionMode,
+  Timebox + TimeboxStatus, TimeboxReview + Completion, ValueClaim + ValueStatus,
+  DecisionRecord)
+- governance.rs (OpenQuestion, Risk, AgentRun + AgentRunStatus, ActivityEvent +
+  ActivityKind + EventSource)
+- gate.rs (GateId x9, GateResult with SPEC sec 9 serialization shape)
+- error.rs (core::Error + From impls for ulid/serde_yaml)
+- ports.rs (expanded: Clock, IdMinter, NodeVault, DerivedIndex, EventSink)
+- lib.rs (module declarations + re-exports)
+
+Files added (core/tests/): contracts.rs (6 EV-CT tests).
+
+Fidelity notes:
+- All types are serde-capable (Serialize/Deserialize) so the Phase 2 markdown
+  adapter can serialize them to frontmatter without changing core.
+- Frontmatter is BTreeMap<String, serde_yaml::Value> - sorted (deterministic per
+  PLAN sec 2) and preserves unknown keys (INV-PORT, INV-EDGE, PLAN sec 2 rule).
+- NodeId wraps ulid::Ulid for value semantics (parse/compare/sort) but the core
+  never mints - IdMinter port owns RNG (INV-ID by construction).
+- No I/O imports in core/ (hexagonal boundary intact). Deps added (serde,
+  serde_yaml, ulid, chrono, thiserror) are all pure data libraries.
+
+Remaining gaps:
+- Ports (NodeVault, DerivedIndex, EventSink, IdMinter) are traits only; no
+  adapters yet. Those land in Phase 2 (NodeVault) and Phase 3 (DerivedIndex).
+- No domain behavior yet - just types. Behaviors (gates, services) land in
+  their phases (5-7).
+
+Status: Accepted
