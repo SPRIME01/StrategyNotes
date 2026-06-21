@@ -131,3 +131,65 @@ Remaining gaps:
   their phases (5-7).
 
 Status: Accepted
+
+---
+
+## EV-002 — Phase 2 markdown storage (S-STORAGE-001 + adapter)
+
+Date: 2026-06-21
+Slice: S-STORAGE-001 + MarkdownVault adapter
+Spec IDs: PRD-001, PRD-003, SDS-STORAGE, INV-DUR, INV-PORT, INV-EDGE, TST-STORAGE
+
+Commands run:
+```bash
+cargo test --workspace
+```
+
+Result:
+```text
+strategynotes-core:
+  contracts.rs ......... 6 passed (Phase 1)
+  smoke.rs ............. 1 passed  (Phase 0)
+  storage.rs ........... 7 passed  (round-trip, determinism, unknown-key preservation,
+                                    missing id/type/delimiter rejection)
+strategynotes-adapters:
+  markdown_vault.rs .... 7 passed  (put/get round-trip through disk, get-missing
+                                    returns None, delete idempotent, all() lists
+                                    every node, files are plain markdown on disk
+                                    [INV-DUR/INV-PORT], atomic write leaves no
+                                    .tmp, unknown keys survive disk round-trip)
+TOTAL: 21 passed, 0 failed
+```
+
+Files added:
+- `core/src/format.rs` - pure markdown parse/serialize (from_markdown / to_markdown).
+  Splits frontmatter between `---` delimiters from body, parses YAML map,
+  extracts required `id` + `type` into typed fields, preserves all remaining
+  keys (including unknown). Deterministic: BTreeMap gives sorted key order.
+- `adapters/` crate (new workspace member) - driven adapters outside the hexagon.
+  - `src/markdown_vault.rs` - MarkdownVault: NodeVault impl using std::fs with
+    atomic writes (write-temp + fsync + rename). Path = `<vault>/<nodeid>.md`.
+  - `tests/markdown_vault.rs` - 7 TST-STORAGE tests.
+
+TDD: storage.rs written first against a stub returning Err (RED verified), then
+implemented (GREEN). markdown_vault.rs written + verified in one pass.
+
+Fidelity notes:
+- INV-DUR proven end-to-end: nodes exist as plain readable `.md` files on disk
+  (`files_on_disk_are_plain_markdown_inv_dur` test opens the file with
+  std::fs::read_to_string and asserts markdown content). Deleting the future
+  SQLite index cannot lose this data.
+- INV-PORT: vault contents are portable text, inspectable without the app.
+- Unknown-key preservation verified through BOTH the pure format layer AND the
+  disk round-trip (two independent tests).
+- Atomic writes verified: no `.tmp` file remains after a successful put.
+- Hexagonal boundary intact: core/src/format.rs is pure (no std::fs); only
+  adapters/ uses std::fs.
+
+Remaining gaps:
+- Typed edge encoding in frontmatter deferred to S-STORAGE-002 (next Phase 2
+  slice). `NodeVault::edges_of` returns empty with a ponytail: marker.
+- Inline [[wikilinks]] and #tag parsing from body not yet (INV-BODY). Later slice.
+- No rebuild-smoke test yet (requires DerivedIndex adapter, Phase 3).
+
+Status: Accepted

@@ -1,0 +1,13 @@
+[package]
+name = "strategynotes-adapters"
+version = "0.0.0"
+edition = "2021"
+description = "Driven adapters for the StrategyNotes hexagonal core (NodeVault, Clock, IdMinter, ...). See SPEC.md sec 3.4."
+publish = false
+
+[dependencies]
+strategynotes-core = { path = "../core" }
+
+[dev-dependencies]
+tempfile = "3"
+serde_yaml = "0.9"

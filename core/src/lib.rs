@@ -15,6 +15,7 @@
 pub mod error;
 pub mod evidence;
 pub mod execution;
+pub mod format;
 pub mod gate;
 pub mod governance;
 pub mod identity;
