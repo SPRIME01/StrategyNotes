@@ -1,0 +1,38 @@
+# StrategyNotes — .gitignore
+
+# Agent / runtime logs (OMC subtask output, etc.)
+.logs/
+
+# Windows download artifacts
+*:Zone.Identifier
+
+# Rust / Cargo
+target/
+**/*.rs.bk
+# Cargo.lock IS committed — StrategyNotes is an application, reproducible builds matter
+
+# Node / pnpm
+node_modules/
+dist/
+.vite/
+.turbo/
+*.tsbuildinfo
+coverage/
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*~
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
