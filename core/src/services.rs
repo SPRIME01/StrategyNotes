@@ -14,7 +14,7 @@ use crate::execution::{
 };
 use crate::gate::GateResult;
 use crate::gates;
-use crate::governance::{ActivityEvent, ActivityKind, EventSource};
+use crate::governance::{ActivityEvent, ActivityKind, AgentRun, AgentRunStatus, EventSource};
 use crate::format;
 use crate::identity::NodeId;
 use crate::node::{EdgeStatus, TypedEdge, EdgeType};
@@ -361,5 +361,72 @@ impl<'a> App<'a> {
             self.emit(id, ActivityKind::Accepted);
         }
         Ok(result)
+    }
+
+    // ---- agent runs (INV-HUMAN quarantine) ----
+
+    pub fn create_agent_run(&self, agent: String, summary: String) -> Result<AgentRun, Error> {
+        let run = AgentRun {
+            id: self.minter.mint(),
+            agent,
+            status: AgentRunStatus::Running,
+            started_at: Some(self.clock.now()),
+            summary: Some(summary),
+        };
+        self.put(&run)?;
+        self.emit(run.id, ActivityKind::Created);
+        Ok(run)
+    }
+
+    /// Move a Running run to Completed (ready for human review).
+    pub fn complete_agent_run(&self, id: NodeId) -> Result<AgentRun, Error> {
+        let mut run = AgentRun::from_node(&self.vault.get(&id)?.ok_or(Error::NotFound(id.to_string()))?)?;
+        run.status = AgentRunStatus::Completed;
+        self.put(&run)?;
+        Ok(run)
+    }
+
+    /// Accept a completed/quarantined run. INV-HUMAN: requires a non-empty
+    /// human reviewer. The gate (agent_rules::can_accept_agent_run) blocks
+    /// without one. On approve: status -> Accepted, human-approval event emitted.
+    pub fn accept_agent_run(
+        &self,
+        id: NodeId,
+        reviewer: Option<&str>,
+    ) -> Result<GateResult, Error> {
+        let mut run = AgentRun::from_node(&self.vault.get(&id)?.ok_or(Error::NotFound(id.to_string()))?)?;
+        let result = crate::agent_rules::can_accept_agent_run(&run, reviewer);
+        if result.is_approved() {
+            run.status = AgentRunStatus::Accepted;
+            self.put(&run)?;
+            // Human-approval event (source = User, never Agent).
+            self.sink.record(ActivityEvent {
+                at: self.clock.now(),
+                node: id,
+                kind: ActivityKind::Accepted,
+                source: Some(EventSource::User),
+            });
+        }
+        Ok(result)
+    }
+
+    /// Reject a run. Status -> Rejected. Audit preserved (the node + its
+    /// status history live in the vault; the daynote records the event).
+    pub fn reject_agent_run(&self, id: NodeId) -> Result<AgentRun, Error> {
+        let mut run = AgentRun::from_node(&self.vault.get(&id)?.ok_or(Error::NotFound(id.to_string()))?)?;
+        run.status = AgentRunStatus::Rejected;
+        self.put(&run)?;
+        self.emit(id, ActivityKind::Modified);
+        Ok(run)
+    }
+
+    /// Request changes: original output preserved (summary unchanged); the run
+    /// moves to Quarantined pending a new review cycle.
+    pub fn request_changes(&self, id: NodeId) -> Result<AgentRun, Error> {
+        let mut run = AgentRun::from_node(&self.vault.get(&id)?.ok_or(Error::NotFound(id.to_string()))?)?;
+        run.status = AgentRunStatus::Quarantined;
+        self.put(&run)?;
+        self.emit(id, ActivityKind::Modified);
+        Ok(run)
     }
 }

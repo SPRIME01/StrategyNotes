@@ -9,6 +9,7 @@
 use crate::evidence::{EvidenceItem, Source, SourceChunk};
 use crate::execution::{DecisionRecord, Timebox, TimeboxReview, ValueClaim, WorkPackage};
 use crate::format;
+use crate::governance::AgentRun;
 use crate::node::{Node, NodeType};
 use crate::strategy::{ChoiceCascade, OutcomeRequirement, StrategicClaim, StrategyBet, StrategyCase};
 
@@ -46,3 +47,4 @@ impl_view!(Timebox, NodeType::Timebox);
 impl_view!(TimeboxReview, NodeType::TimeboxReview);
 impl_view!(ValueClaim, NodeType::ValueClaim);
 impl_view!(DecisionRecord, NodeType::DecisionRecord);
+impl_view!(AgentRun, NodeType::AgentRun);

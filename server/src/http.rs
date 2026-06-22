@@ -19,9 +19,10 @@ use tower_http::cors::CorsLayer;
 use strategynotes_adapters::{DaynoteEventSink, MarkdownVault, SQLiteIndex, SystemClock, UlidMinter};
 use strategynotes_core::evidence::{EvidenceKind, ProofLevel};
 use strategynotes_core::execution::{Completion, PomoEstimate};
-use strategynotes_core::ports::DerivedIndex;
+use strategynotes_core::ports::{DerivedIndex, NodeVault};
 use strategynotes_core::services::App;
 use strategynotes_core::trace::reachable_via_spine;
+use strategynotes_core::views::TypedView;
 use strategynotes_core::{AttentionMode, GateResult, NodeId, PomoPattern};
 
 /// Owned bundle of concrete adapters; shared across handlers via Arc.
@@ -70,6 +71,11 @@ pub async fn serve(data_dir: &Path, port: u16) -> Result<(), Box<dyn std::error:
         .route("/api/timeboxes/:id/review", post(review_timebox))
         .route("/api/value-claims", post(claim_value))
         .route("/api/value-claims/:id/validate", post(validate_value))
+        .route("/api/agent-runs", get(list_agent_runs))
+        .route("/api/agent-runs/:id", get(get_agent_run))
+        .route("/api/agent-runs/:id/accept", post(accept_agent_run))
+        .route("/api/agent-runs/:id/reject", post(reject_agent_run))
+        .route("/api/agent-runs/:id/request-changes", post(request_changes))
         .route("/api/trace/:id", get(trace))
         .route("/api/daynote/:date", get(daynote))
         .layer(CorsLayer::permissive())
@@ -302,6 +308,62 @@ async fn validate_value(
     AxumPath(id): AxumPath<String>,
 ) -> Result<Json<GateResult>, AppError> {
     Ok(Json(st.app().validate_value(NodeId::parse(&id)?)?))
+}
+
+// ---- agent runs (INV-HUMAN quarantine) ----
+
+#[derive(Deserialize)]
+struct CreateAgentRunBody {
+    agent: String,
+    summary: String,
+}
+
+async fn list_agent_runs(
+    State(st): State<Arc<ServerState>>,
+) -> Result<Json<Vec<String>>, AppError> {
+    st.index.rebuild(&st.vault)?;
+    let ids = st.index.nodes_by_type(strategynotes_core::node::NodeType::AgentRun)?;
+    Ok(Json(ids.into_iter().map(|i| i.to_lexical()).collect()))
+}
+
+async fn get_agent_run(
+    State(st): State<Arc<ServerState>>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let nid = NodeId::parse(&id)?;
+    let node = st.vault.get(&nid)?.ok_or(AppError(StatusCode::NOT_FOUND, "agent run not found".into()))?;
+    let run = strategynotes_core::governance::AgentRun::from_node(&node)?;
+    Ok(Json(serde_json::to_value(&run)?))
+}
+
+#[derive(Deserialize)]
+struct ReviewerBody {
+    reviewer: Option<String>,
+}
+
+async fn accept_agent_run(
+    State(st): State<Arc<ServerState>>,
+    AxumPath(id): AxumPath<String>,
+    Json(b): Json<ReviewerBody>,
+) -> Result<Json<GateResult>, AppError> {
+    let r = b.reviewer.as_deref();
+    Ok(Json(st.app().accept_agent_run(NodeId::parse(&id)?, r)?))
+}
+
+async fn reject_agent_run(
+    State(st): State<Arc<ServerState>>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let run = st.app().reject_agent_run(NodeId::parse(&id)?)?;
+    Ok(Json(serde_json::to_value(&run)?))
+}
+
+async fn request_changes(
+    State(st): State<Arc<ServerState>>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let run = st.app().request_changes(NodeId::parse(&id)?)?;
+    Ok(Json(serde_json::to_value(&run)?))
 }
 
 #[derive(Serialize)]
