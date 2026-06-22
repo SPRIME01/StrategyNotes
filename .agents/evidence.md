@@ -785,3 +785,52 @@ calendar providers (EV-SKIP, no creds), title-resolution for [[wikilink]],
 capacity-ledger UI surface, UI design polish.
 
 Status: Accepted
+
+---
+
+## EV-013 — Post-MVP: FTS5 + wikilink title resolution + full calendar subsystem
+
+Date: 2026-06-22
+Slices: S-FTS5, S-WIKILINK-TITLE, S-CAL-FULL (foundation + sync + providers)
+Spec IDs: INV-BODY, INV-CAL, PRD-025, SDS-CAL, TST-CAL, TST-SEARCH, TST-BODY
+
+Commands run (per-crate; full-workspace timed out on compile, not on tests):
+```bash
+cargo test -p strategynotes-core        # 70 passed
+cargo test -p strategynotes-adapters    # 38 passed
+cargo test -p strategynotes-calendar    # 18 passed (foundation 6 + sync 4 + providers 8)
+cargo clippy --workspace --all-targets -- -D warnings   # clean
+```
+Total cargo: 126 passed, 0 failed.
+
+Result summary:
+```text
+Wikilink title->id resolution (INV-BODY sub-gap closed):
+  backlinks UNION body_refs WHERE target == node.title. TST-BODY-007.
+
+FTS5 search (replaced LIKE):
+  nodes_fts virtual table (unicode61), snippet() excerpts, content blob from
+  search_text_of. Malformed MATCH queries return empty (no crash). 6 TST-SEARCH.
+
+Calendar subsystem (new calendar/ crate, adapted from the standalone spec):
+  - Timebox (markdown) stays canonical; sync metadata is non-strategy-critical
+    SQLite (INV-DUR holds).
+  - SecretStore port + FileSecretStore (dev); Stronghold is the Tauri path.
+  - SyncMetadataStore (SQLite) + SyncMetadata/SyncStatus/RemoteEventRef/SyncCursor.
+  - ICS import (parse_ics, hand-rolled; calcard was phantom).
+  - async CalendarProviderAdapter trait (async_trait, Send-safe) + MockProvider.
+  - Sync engine: push (pending create/update/delete -> provider -> Synced/Error),
+    pull (unmatched remote for explicit review). INV-CAL: failure marks Error,
+    never mutates the local Timebox.
+  - REAL adapters: CalDavAdapter (PROPFIND/REPORT/PUT/DELETE, basic auth,
+    hand-rolled base64, multistatus XML parse, ETag-safe), GoogleAdapter (REST
+    v3, Bearer, syncToken, items+cancelled), MicrosoftAdapter (Graph, Bearer,
+    delta-query, PATCH). All over HttpTransport trait.
+  - ReqwestTransport (feature-gated google/microsoft/caldav) = real network.
+  - 8 provider contract tests via MockHttpTransport + INV-CAL 503 test.
+```
+
+Evidence types: EV-TST (126), EV-LINT (clippy -D warnings clean), EV-SKIP
+(Tauri build/run, live-provider smoke).
+
+Status: Accepted

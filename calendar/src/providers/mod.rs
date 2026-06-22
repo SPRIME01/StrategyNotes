@@ -72,3 +72,5 @@ pub use http::{HttpRequest, HttpResponse, HttpTransport, MockHttpTransport};
 pub use caldav::{CalDavAdapter, CalDavConfig};
 pub use google::GoogleAdapter;
 pub use microsoft::MicrosoftAdapter;
+#[cfg(any(feature = "google", feature = "microsoft", feature = "caldav"))]
+pub mod reqwest_transport;
