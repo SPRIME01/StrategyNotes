@@ -9,7 +9,9 @@ use std::fmt;
 use ulid::Ulid;
 
 /// Opaque node identity. Stable for the life of the node.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+)]
 #[serde(transparent)]
 pub struct NodeId(pub Ulid);
 

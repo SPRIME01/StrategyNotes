@@ -18,8 +18,8 @@
 
 use crate::error::Error;
 use crate::identity::NodeId;
-use crate::node::{EdgeStatus, EdgeType, Node, NodeType, TypedEdge};
-use serde::{Deserialize, Serialize};
+use crate::node::{EdgeStatus, EdgeType, Frontmatter, Node, NodeType, TypedEdge};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 /// Parse a markdown document into a [`Node`].
 ///
@@ -181,4 +181,40 @@ pub fn set_edges(node: &mut Node, edges: &[TypedEdge]) -> Result<(), Error> {
     let val = serde_yaml::to_value(&entries).map_err(|e| Error::Serialize(e.to_string()))?;
     node.frontmatter.insert("edges".into(), val);
     Ok(())
+}
+
+// ---- typed view <-> frontmatter bridge ----
+//
+// A typed view struct (StrategyCase, EvidenceItem, ...) serializes its fields
+// to/from the frontmatter map. The struct's `id` field is `#[serde(skip)]` and
+// set explicitly from/to `Node.id` so it isn't duplicated in the map.
+
+/// Serialize a typed view into a frontmatter map (id is handled by the caller).
+pub fn frontmatter_from<T: Serialize>(val: &T) -> Result<Frontmatter, Error> {
+    let value = serde_yaml::to_value(val).map_err(|e| Error::Serialize(e.to_string()))?;
+    Ok(value_to_map(value))
+}
+
+/// Deserialize a typed view from a frontmatter map (id is handled by the caller).
+pub fn frontmatter_to<T: DeserializeOwned>(fm: &Frontmatter) -> Result<T, Error> {
+    let value = map_to_value(fm);
+    serde_yaml::from_value(value).map_err(|e| Error::Deserialize(e.to_string()))
+}
+
+fn value_to_map(value: serde_yaml::Value) -> Frontmatter {
+    match value {
+        serde_yaml::Value::Mapping(m) => m
+            .into_iter()
+            .filter_map(|(k, v)| Some((k.as_str()?.to_string(), v)))
+            .collect(),
+        _ => Frontmatter::new(),
+    }
+}
+
+fn map_to_value(fm: &Frontmatter) -> serde_yaml::Value {
+    let mut mapping = serde_yaml::Mapping::new();
+    for (k, v) in fm {
+        mapping.insert(serde_yaml::Value::String(k.clone()), v.clone());
+    }
+    serde_yaml::Value::Mapping(mapping)
 }

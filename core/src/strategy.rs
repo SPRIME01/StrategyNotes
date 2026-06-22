@@ -24,6 +24,9 @@ pub enum CasePhase {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StrategyCase {
+    /// `#[serde(skip)]`: id lives in `Node.id`, not in the frontmatter payload.
+    /// Set explicitly by [`StrategyCase::to_node`] / [`StrategyCase::from_node`].
+    #[serde(skip)]
     pub id: NodeId,
     pub title: String,
     pub phase: CasePhase,
@@ -31,6 +34,36 @@ pub struct StrategyCase {
     pub owner: Option<String>,
     #[serde(default)]
     pub arena: Option<String>,
+}
+
+impl StrategyCase {
+    /// Create a new case in its initial phase (`EstablishReality`).
+    pub fn new(id: NodeId, title: String) -> Self {
+        Self {
+            id,
+            title,
+            phase: CasePhase::EstablishReality,
+            owner: None,
+            arena: None,
+        }
+    }
+
+    /// Serialize to a storage [`Node`] (strategy_case typed note).
+    pub fn to_node(&self) -> Result<crate::node::Node, crate::Error> {
+        Ok(crate::node::Node {
+            id: self.id,
+            ty: crate::node::NodeType::StrategyCase,
+            frontmatter: crate::format::frontmatter_from(self)?,
+            body: String::new(),
+        })
+    }
+
+    /// Parse a storage [`Node`] back into a typed view.
+    pub fn from_node(node: &crate::node::Node) -> Result<Self, crate::Error> {
+        let mut case: StrategyCase = crate::format::frontmatter_to(&node.frontmatter)?;
+        case.id = node.id;
+        Ok(case)
+    }
 }
 
 /// An outcome requirement (ORD). Acceptance criteria required for success.

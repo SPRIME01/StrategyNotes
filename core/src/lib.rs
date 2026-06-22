@@ -12,6 +12,7 @@
 //! Any import of std::fs, rusqlite, reqwest, tokio, or Tauri types inside this
 //! crate is a review-blocker (AGENTS.md sec 10).
 
+pub mod case_lifecycle;
 pub mod error;
 pub mod evidence;
 pub mod execution;

@@ -307,3 +307,51 @@ Remaining gaps:
   (work packages, timeboxes) which produce those events.
 
 Status: Accepted
+
+---
+
+## EV-005 — Phase 4 clone/cycle detection (INV-CLONE) + OQ-006 resolution
+
+Date: 2026-06-21
+Slice: S-CLONE-001
+Spec IDs: PRD-006, SDS-GRAPH, INV-CLONE, TST-GRAPH
+
+Decisions:
+- OQ-006 resolved by Sam, Option A: a clone is a typed edge `parent --places-->
+  child`. Added `Places` variant to EdgeType. SPEC sec 4.3 updated.
+- OQ-001 marked resolved (de facto): frontmatter edge encoding was implemented
+  in S-STORAGE-002; recorded in .agents/open_questions.md.
+
+Commands run:
+```bash
+cargo test --workspace
+```
+
+Result:
+```text
+strategynotes-core:
+  graph.rs ............. 6 passed
+    - adding_a_new_placement_with_no_path_is_safe
+    - closing_a_direct_cycle_is_rejected
+    - closing_a_transitive_cycle_is_rejected
+    - self_loop_is_rejected
+    - non_places_edges_do_not_participate_in_cycle_check
+    - independent_branch_does_not_trigger_false_positive
+TOTAL workspace: 37 passed, 0 failed
+```
+
+Files added:
+- core/src/graph.rs - would_create_placement_cycle(index, parent, child): pure
+  DFS over the DerivedIndex port following Places out-edges from child; returns
+  true if parent is reachable (would close a loop) or parent==child (self-loop).
+- core/tests/graph.rs - FakeIndex (in-memory DerivedIndex impl) + 6 cycle tests.
+
+Fidelity notes:
+- INV-CLONE is now executable: any code path that adds a Places edge MUST call
+  would_create_placement_cycle first and reject on true. (The NodeService that
+  enforces this lands with the driving-adapter layer; the pure check is proven.)
+- Hexagonal boundary intact: graph.rs takes &dyn DerivedIndex - pure, no I/O.
+- Only Places edges participate in cycle detection; strategy edges (supports,
+  contradicts, etc.) are not structural and do not affect cloning.
+
+Status: Accepted
