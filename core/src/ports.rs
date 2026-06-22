@@ -6,6 +6,7 @@
 //! on an adapter. Any I/O type (std::fs, rusqlite, reqwest, tokio, tauri)
 //! appearing inside this crate is a review-blocker (AGENTS sec 10).
 
+use crate::body::BodyRef;
 use crate::error::Error;
 use crate::governance::ActivityEvent;
 use crate::identity::NodeId;
@@ -53,6 +54,13 @@ pub trait DerivedIndex {
     fn backlinks(&self, id: &NodeId) -> Result<Vec<NodeId>, Error>;
     fn out_edges(&self, id: &NodeId) -> Result<Vec<TypedEdge>, Error>;
     fn nodes_by_type(&self, ty: crate::node::NodeType) -> Result<Vec<NodeId>, Error>;
+
+    /// Body-derived inline refs/tags for a node (INV-BODY). Default: empty
+    /// (adapters that don't parse bodies return nothing; the markdown index
+    /// adapter overrides this).
+    fn body_refs_of(&self, _id: &NodeId) -> Result<Vec<BodyRef>, Error> {
+        Ok(Vec::new())
+    }
 }
 
 /// Audit / activity sink (daynote ledger). Guards INV-DAY.

@@ -689,3 +689,45 @@ pnpm -C ui build ......... 148 kB bundle, clean typecheck
 8. Multi-user / sync outside core - explicitly out of scope (PRD-030).
 
 Status: Accepted
+
+---
+
+## EV-011 — Phase A baseline (takeover handoff)
+
+Date: 2026-06-22
+Slice: S-BASELINE (no new features; baseline verification only)
+Spec IDs: PLAN sec 13 (Definition of Done baseline)
+
+Commands run:
+```bash
+cargo test --workspace
+cargo build --workspace
+pnpm -C ui build
+cargo run -p strategynotes-server -- /tmp/sn-baseline   # CLI spine
+# HTTP server (PTY) + curl /api/health, /api/cases
+```
+
+Result:
+```text
+cargo test --workspace ... 77 passed, 0 failed
+cargo build --workspace ... Finished (clean)
+pnpm -C ui build .......... 148 kB bundle, clean
+CLI spine ................ exit 0; all 6 gates fire (accept evidence APPROVED,
+                          approve empty bet BLOCKED with 6 reasons, approve
+                          complete APPROVED, commit work APPROVED, verify
+                          timebox APPROVED, validate value APPROVED); trace
+                          reaches value claim; 14 daynote lines.
+HTTP server .............. /api/health -> "ok"; POST /api/cases -> created
+                          with id; GET /api/cases -> [id].
+```
+
+Evidence types: EV-TST (77 tests), EV-BLD (cargo+pnpm), EV-SMOKE (CLI spine +
+HTTP server), EV-UI (UI builds; dev server not run here - no display).
+
+Fidelity notes:
+- Baseline holds. No regressions vs EV-010. The enforcement core is intact.
+- This EV is the reference point for the finish-line build.
+
+Remaining gaps: confirmed in FINISH_LINE_PLAN.md (8 items; one out of scope).
+
+Status: Accepted
