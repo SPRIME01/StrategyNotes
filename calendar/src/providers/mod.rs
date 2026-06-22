@@ -61,12 +61,14 @@ pub trait CalendarProviderAdapter: Send + Sync {
     async fn delete_event(&self, remote: &RemoteEventRef) -> Result<(), ProviderError>;
 }
 
+pub mod http;
 pub mod mock;
-#[cfg(feature = "caldav")]
 pub mod caldav;
-#[cfg(feature = "google")]
 pub mod google;
-#[cfg(feature = "microsoft")]
 pub mod microsoft;
 
 pub use mock::MockProvider;
+pub use http::{HttpRequest, HttpResponse, HttpTransport, MockHttpTransport};
+pub use caldav::{CalDavAdapter, CalDavConfig};
+pub use google::GoogleAdapter;
+pub use microsoft::MicrosoftAdapter;

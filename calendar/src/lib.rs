@@ -24,7 +24,11 @@ pub mod sync_store;
 
 pub use ics_import::{parse_ics, ImportedEvent};
 pub use model::{RemoteEventRef, SyncCursor, SyncMetadata, SyncStatus};
-pub use providers::{CalendarProviderAdapter, MockProvider, ProviderError, PullResult, RemoteCalendar};
+pub use providers::{
+    http::{HttpRequest, HttpResponse, HttpTransport, MockHttpTransport},
+    CalDavAdapter, CalDavConfig, CalendarProviderAdapter, GoogleAdapter, MicrosoftAdapter,
+    MockProvider, ProviderError, PullResult, RemoteCalendar,
+};
 pub use secrets::{FileSecretStore, SecretStore};
 pub use sync::{pull, push, PullSummary, PushSummary};
 pub use sync_store::SyncMetadataStore;
