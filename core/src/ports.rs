@@ -61,6 +61,12 @@ pub trait DerivedIndex {
     fn body_refs_of(&self, _id: &NodeId) -> Result<Vec<BodyRef>, Error> {
         Ok(Vec::new())
     }
+
+    /// Full-text-ish search (Phase D). Derived; rebuildable; never source of
+    /// truth. Default: empty.
+    fn search(&self, _query: &str) -> Result<Vec<crate::search::SearchResult>, Error> {
+        Ok(Vec::new())
+    }
 }
 
 /// Audit / activity sink (daynote ledger). Guards INV-DAY.

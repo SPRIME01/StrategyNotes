@@ -77,6 +77,7 @@ pub async fn serve(data_dir: &Path, port: u16) -> Result<(), Box<dyn std::error:
         .route("/api/agent-runs/:id/reject", post(reject_agent_run))
         .route("/api/agent-runs/:id/request-changes", post(request_changes))
         .route("/api/trace/:id", get(trace))
+        .route("/api/search", get(search))
         .route("/api/daynote/:date", get(daynote))
         .layer(CorsLayer::permissive())
         .with_state(state);
@@ -381,6 +382,19 @@ async fn trace(
     Ok(Json(TraceResponse {
         reachable: reach.into_iter().map(|n| n.to_lexical()).collect(),
     }))
+}
+
+#[derive(Deserialize)]
+struct SearchQuery {
+    q: String,
+}
+
+async fn search(
+    State(st): State<Arc<ServerState>>,
+    axum::extract::Query(q): axum::extract::Query<SearchQuery>,
+) -> Result<Json<Vec<strategynotes_core::search::SearchResult>>, AppError> {
+    st.index.rebuild(&st.vault)?;
+    Ok(Json(st.index.search(&q.q)?))
 }
 
 async fn daynote(

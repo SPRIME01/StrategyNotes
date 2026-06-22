@@ -41,10 +41,11 @@ impl SQLiteIndex {
 
     fn init(conn: &Connection) -> Result<(), Error> {
         conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS nodes (
-                id   TEXT PRIMARY KEY,
-                type TEXT NOT NULL,
-                body TEXT NOT NULL
+            "            CREATE TABLE IF NOT EXISTS nodes (
+                id          TEXT PRIMARY KEY,
+                type        TEXT NOT NULL,
+                body        TEXT NOT NULL,
+                search_text TEXT NOT NULL DEFAULT ''
             );
             CREATE TABLE IF NOT EXISTS edges (
                 from_id   TEXT NOT NULL,
@@ -77,9 +78,10 @@ impl DerivedIndex for SQLiteIndex {
         for node in &nodes {
             let id = node.id.to_lexical();
             let ty = snake_case_name(node.ty);
+            let stext = strategynotes_core::search::search_text_of(node);
             tx.execute(
-                "INSERT OR REPLACE INTO nodes (id, type, body) VALUES (?1, ?2, ?3)",
-                params![id, ty, node.body],
+                "INSERT OR REPLACE INTO nodes (id, type, body, search_text) VALUES (?1, ?2, ?3, ?4)",
+                params![id, ty, node.body, stext],
             )
             .map_err(rusqlite_err)?;
             for edge in format::edges_of(node)? {
@@ -194,6 +196,32 @@ impl DerivedIndex for SQLiteIndex {
             })
             .collect();
         rows
+    }
+
+    fn search(&self, query: &str) -> Result<Vec<strategynotes_core::search::SearchResult>, Error> {
+        let needle = format!("%{}%", query.to_lowercase());
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare("SELECT id, type, body FROM nodes WHERE search_text LIKE ?1 ORDER BY id")
+            .map_err(rusqlite_err)?;
+        let rows = stmt
+            .query_map([&needle], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                ))
+            })
+            .map_err(rusqlite_err)?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id_s, ty_s, body) = row.map_err(rusqlite_err)?;
+            let id = NodeId::parse(&id_s).map_err(Error::from)?;
+            let ty: NodeType = from_snake_case::<NodeType>(&ty_s)?;
+            let excerpt = body.chars().take(120).collect::<String>();
+            out.push(strategynotes_core::search::SearchResult { id: id.to_lexical(), ty, excerpt });
+        }
+        Ok(out)
     }
 }
 
