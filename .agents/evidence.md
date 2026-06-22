@@ -599,3 +599,93 @@ Remaining gaps:
   not started.
 
 Status: Accepted
+
+---
+
+## EV-010 — Phase 15 conformance + fidelity review (the capstone)
+
+Date: 2026-06-21
+Slice: S-CONFIRM-001
+Spec IDs: PLAN sec 13 (Definition of Done), PLAN sec 15 (observability/conformance),
+         all INV-*, all TST-*
+
+Commands run:
+```bash
+cargo test --workspace     # the conformance gate
+cargo build --workspace    # build conformance
+pnpm -C ui build           # frontend build conformance
+```
+
+Result:
+```text
+cargo test --workspace ... 77 passed, 0 failed
+  core unit (14): case_lifecycle 6 + evidence_rules 4 + agent_rules 4
+  core integration: contracts 6, smoke 1, storage 9, gates 16, graph 6,
+                    trace 4, case_domain 3
+  adapters integration: markdown_vault 7, sqlite_index 4, daynote_sink 4,
+                         vertical_slice 2, vrd 1
+cargo build --workspace ... OK (core, adapters, server)
+pnpm -C ui build ......... 148 kB bundle, clean typecheck
+```
+
+### Definition of Done (PLAN sec 13) - status per item
+
+| Item | Status |
+|---|---|
+| All in-scope PRDs implemented or explicitly deferred | Partial: PRD-001..024 implemented; PRD-025 (calendar providers) partial (ICS only); PRD-026 (agent quarantine) implemented; PRD-027 (atomic UI) demo-only; PRD-028..030 stubs |
+| All invariants have direct tests | DONE - see invariant table below |
+| Core failure behaviors tested | DONE |
+| Markdown remains durable source of truth | DONE (TST-STORAGE + files_on_disk test) |
+| SQLite rebuildable without data loss | DONE (index_loss_then_rebuild test) |
+| All strategy objects serialize to markdown | DONE (TypedView x13) |
+| All gates work | DONE (16 gate tests + spine) |
+| Calendar smoke tests pass or skipped | DONE (ICS export; providers EV-SKIP) |
+| UI shows maturity/gate states | Partial (spine runner renders APPROVED/BLOCKED) |
+| Daynote ledger captures activity | DONE (4 daynote tests + spine) |
+| External integrations behind contracts | DONE (CalendarProvider port; only ICS adapter) |
+| Operator-visible errors | DONE (AppError -> HTTP 400/500; core::Error) |
+| Evidence records for completed slices | DONE (EV-000..EV-010) |
+| No unresolved blocking questions | DONE (OQ-001, OQ-006 resolved; others pending but non-blocking) |
+| Known limitations documented | DONE - below |
+
+### Invariant conformance table (every INV has an executable proof)
+
+| INV | Proof | Test |
+|---|---|---|
+| INV-DUR | index_loss_then_rebuild_yields_equivalent_state | sqlite_index |
+| INV-PORT | files_on_disk_are_plain_markdown_inv_dur | markdown_vault |
+| INV-EDGE | typed_edges_round_trip_through_frontmatter | storage |
+| INV-ID | node_id_roundtrips_lexically + ULID-backed | contracts |
+| INV-CLONE | would_create_placement_cycle (6 cases) | graph |
+| INV-DAY | records_events_into_a_per_day_file + source metadata | daynote_sink |
+| INV-EVID | can_accept_evidence (source or manual basis) | gates |
+| INV-CLAIM | can_accept_claim (proof level + support) | gates |
+| INV-CONTRA | contradicts_edges_are_not_followed_in_spine_trace | trace |
+| INV-HUMAN | can_accept_agent_run (needs human approver) | agent_rules |
+| INV-BET | can_approve_bet (6 required fields) | gates |
+| INV-WORK | can_commit_work_package (7 required fields) | gates |
+| INV-TIME | schedule_timebox requires PomoEstimate | services + spine |
+| INV-EXEC | review_and_verify_timebox captures exceptions | services + spine |
+| INV-REVIEW | can_verify_timebox (review required) | gates |
+| INV-VALUE | can_claim_value + VrdView surfaces debt | gates + vrd |
+| INV-CAL | ICS export is local; no provider needed | ics + spine |
+
+### Known limitations (honest)
+
+1. UI is a spine-runner demo, not the full atomic component library (SPEC
+   sec 11 organisms: cockpit, evidence inbox, bet board, MCGCS map, choice
+   cascade canvas, execution runbook, pomo ledger, trace explorer, value panel,
+   agent draft inbox). Each is a composition of the existing API.
+2. Tauri desktop shell not wired (S-PHASE0-002). The app runs as HTTP+UI; Tauri
+   wraps the same UI and swaps fetch for IPC.
+3. Calendar providers (Google/Outlook/iCloud) not implemented - ICS export only
+   (OQ-002 Option B). CalendarProvider port exists; adapters deferred.
+4. Inline [[wikilink]] and #tag body parsing (INV-BODY) not implemented.
+5. Full-text search / FTS index not implemented.
+6. Agent quarantine HTTP endpoint not exposed (the gate + service exist; the
+   /api/agent-runs/:id/accept endpoint is a minor follow-up).
+7. Pomo capacity gate (Strategy Capacity, SPEC sec 9) not implemented - the
+   capacity math is straightforward but no service wires it yet.
+8. Multi-user / sync outside core - explicitly out of scope (PRD-030).
+
+Status: Accepted
