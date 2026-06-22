@@ -1,0 +1,29 @@
+[package]
+name = "strategynotes-calendar"
+version = "0.0.0"
+edition = "2021"
+description = "Calendar provider subsystem for StrategyNotes: real adapters (Google/Microsoft/CalDAV) behind feature flags, sync engine, secrets. Timebox (markdown) stays canonical; sync metadata is non-strategy-critical SQLite."
+publish = false
+
+[dependencies]
+strategynotes-core = { path = "../core" }
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2"
+async-trait = "0.1"
+
+# Real HTTP providers are opt-in (feature flags). Default build has no reqwest.
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], optional = true }
+tokio = { version = "1", features = ["full"], optional = true }
+
+[features]
+default = []
+google = ["dep:reqwest", "dep:tokio"]
+microsoft = ["dep:reqwest", "dep:tokio"]
+caldav = ["dep:reqwest", "dep:tokio"]
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
