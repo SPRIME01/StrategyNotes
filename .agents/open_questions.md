@@ -7,26 +7,12 @@ Resolve a question by editing its Status line and adding a Resolved subsection.
 
 ## Active open questions (from PLAN sec 11)
 
-### OQ-006 — Node grouping / clone model (BLOCKING Phase 4 INV-CLONE)
-Status: Escalated (blocking S-CLONE-001)
-Affected: PRD-006, SDS-GRAPH, SDS-NODE, INV-CLONE
-Owner: Sam / Architecture
-Question: SPEC sec 4.3 says clones are "equal placements; clone edits propagate;
-  clone-induced cycles rejected" but does not specify HOW a clone is encoded.
-Options:
-  A. A `placement`/`parent` typed edge (clones are typed edges of a new edge type).
-  B. Outline structure in the parent node's body (like Roam/Logseq block refs).
-  C. A frontmatter `parents: [id, id]` key on the cloned node.
-  D. A separate `placement` node type linking parent -> child.
-Why blocking: implementing clone + cycle detection (INV-CLONE) requires picking
-one. Inventing a model here would violate PLAN sec 1 drift rule. Need Sam's call.
-
 ### OQ-001 — Markdown schema for typed strategy edges
-Status: Pending (recommend Option A: frontmatter)
+Status: Resolved 2026-06-21 (Option A: frontmatter)
 Affected: PRD-005, SDS-GRAPH, INV-EDGE, INV-PORT
-Owner: Sam / Architecture
-Note: SPEC sec 3.4 and sec 4.2 already assume frontmatter-authoritative edges.
-Decision needed: confirm Option A so Phase 2 can implement the serializer.
+Decision: Edges encoded in frontmatter under `edges: [{to, type, status?}]`
+  (implemented in `core/src/format.rs` edges_of/set_edges, Phase 2 slice
+  S-STORAGE-002). Verified by TST-STORAGE + TST-GRAPH round-trip tests.
 
 ### OQ-002 — Calendar integration level for MVP
 Status: Pending (recommend Option B: internal timeboxes + ICS export)
@@ -57,4 +43,11 @@ Owner: Sam / Storage
 Owner: Sam (all)
 
 ## Resolved
-(none yet)
+
+### OQ-006 — Node grouping / clone model
+Resolved: 2026-06-21 by Sam. Option A chosen.
+Decision: A clone is a typed edge `parent --places--> child` (new `Places` edge
+  type added to EdgeType). Multi-parent clones = multiple incoming Places edges.
+  Cycle detection traverses the Places subgraph. Implemented in Phase 4 slice
+  S-CLONE-001 (`core/src/graph.rs`). SPEC sec 4.3 updated to record the decision.
+  Unblocked INV-CLONE.

@@ -18,6 +18,7 @@ pub mod execution;
 pub mod format;
 pub mod gate;
 pub mod governance;
+pub mod graph;
 pub mod identity;
 pub mod naming;
 pub mod node;

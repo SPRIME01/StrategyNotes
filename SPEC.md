@@ -281,7 +281,7 @@ Source Chunk
 
 - **ULID** for node identity (stable, sortable, path-mapped).
 - **Branch** placement lets one node appear in multiple contexts without duplication.
-- **Clone / multi-parent placement** — e.g. one evidence item belongs to ERD, SLD, VSD, and VRD simultaneously. Clones are **equal placements**; clone edits propagate; clone-induced cycles are rejected.
+- **Clone / multi-parent placement** — e.g. one evidence item belongs to ERD, SLD, VSD, and VRD simultaneously. Clones are **equal placements**; clone edits propagate; clone-induced cycles are rejected. **Encoding (OQ-006 resolved 2026-06-21, Option A):** a clone is a typed edge `parent --places--> child` (the `Places` edge type, §4.2). Multi-parent = a child with multiple incoming `Places` edges. Cycle detection: before adding `P --places--> C`, traverse `C`'s `Places` descendants; reject if `P` is reachable (would close a loop). See `core::graph::would_create_placement_cycle`.
 - **Unknown-key preservation:** parsers MUST round-trip frontmatter keys they do not understand.
 - **Atomic writes:** markdown files are never written non-atomically (corruption risk to the source of truth).
 

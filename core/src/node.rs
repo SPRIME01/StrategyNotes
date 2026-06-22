@@ -83,6 +83,10 @@ pub enum EdgeType {
     ReviewedBy,
     CreatedFrom,
     ComparesWith,
+    /// Structural placement: `parent --places--> child`. A clone is a Places
+    /// edge; multi-parent clones = multiple incoming Places edges. Clone cycles
+    /// are rejected (INV-CLONE). OQ-006 resolved Option A, 2026-06-21.
+    Places,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
