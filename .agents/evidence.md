@@ -539,3 +539,63 @@ Remaining gaps (honest):
   observability/conformance (Phase 15) - not started.
 
 Status: Accepted
+
+---
+
+## EV-009 — HTTP driving adapter + React UI (the app is runnable + visible)
+
+Date: 2026-06-21
+Slice: S-HTTP-001 + S-UI-001
+Spec IDs: PRD-027, SDS-UI, SDS-EXEC, INV-HUMAN (UI cannot decide approval)
+
+Commands run:
+```bash
+cargo build -p strategynotes-server      # builds the HTTP server + CLI
+cargo test --workspace                    # 72 passed, 0 failed
+pnpm -C ui build                          # UI builds (148 kB bundle)
+# Live: server started, curl confirmed gate blocks over HTTP:
+#   POST /api/bets/<id>/approve ->
+#   {"status":"blocked","failed_gates":["missing linked choice cascade",
+#    "missing assumptions","counterevidence not reviewed",
+#    "missing success metric","missing kill criteria","missing owner"]}
+```
+
+Files added:
+- server/src/http.rs - axum HTTP driving adapter: 16 REST endpoints covering
+  the full spine (create case/source/evidence/claim/bet/work_package/timebox/
+  value_claim + accept/approve/commit/review/validate gates + trace + daynote).
+  ServerState holds concrete adapters; App<'_> is built per-request. AppError
+  maps core::Error/io::Error/ulid/parse -> HTTP 400/500.
+- server/src/main.rs - dispatches: `serve [data-dir] [port]` runs HTTP;
+  otherwise runs the CLI spine demo.
+- ui/src/api.ts - typed fetch client for all endpoints.
+- ui/src/App.tsx - spine runner: 13-step timeline that calls the API in
+  sequence and renders each gate result (green APPROVED / red BLOCKED with
+  reasons). Proves the spine is visible.
+- ui/src/vite-env.d.ts - vite/client types.
+- ui/vite.config.ts - dev proxy /api -> 127.0.0.1:8787.
+
+Bug fixed during this slice: id fields were #[serde(skip)] (correct for the
+frontmatter bridge) which dropped id from JSON API responses. Switched to
+#[serde(default)] - JSON responses include id; to_markdown still injects id
+into the on-disk frontmatter separately, so storage round-trips either way
+(all 72 tests still green).
+
+Fidelity notes:
+- Backend-owns-gates is REAL OVER HTTP: the UI calls /api/bets/:id/approve and
+  gets back {"status":"blocked","failed_gates":[...]}. The UI renders; it
+  never decides approval (INV-HUMAN at the API boundary).
+- The full vertical slice (EV-008) still passes - the HTTP layer is a thin
+  driving adapter over the same App services the slice exercises.
+
+Remaining gaps:
+- The UI is a spine-runner demo, not the full atomic component library from
+  SPEC sec 11 (cockpit, evidence inbox, bet board, MCGCS map, choice cascade
+  canvas, execution runbook, pomo ledger, trace explorer, value panel, agent
+  draft inbox). Those are compositions of the same API.
+- Tauri desktop shell not wired (the HTTP+UI works headless; Tauri wraps the
+  same UI and swaps fetch for IPC).
+- Agent draft quarantine (Phase 13), full observability suite (Phase 15) -
+  not started.
+
+Status: Accepted
