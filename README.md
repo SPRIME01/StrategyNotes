@@ -183,5 +183,43 @@ Then create a new strategy case or open an existing StrategyNotes workspace.
 - [Product specification](SPEC.md)
 - [Implementation plan](PLAN.md)
 - [Project changelog](CHANGELOG.md)
+- [Finish-line audit](FINISH_LINE_PLAN.md)
+- [Conformance](CONFORMANCE.md)
+- [Known limitations](KNOWN_LIMITATIONS.md)
+
+## Developer quickstart
+
+```bash
+# Tests (the conformance gate — 107 tests, 0 failures)
+cargo test --workspace && pnpm -C ui test
+
+# Run the spine end-to-end as a CLI demo (proves every gate fires)
+cargo run -p strategynotes-server -- /tmp/sn
+
+# Run the HTTP API + React UI
+cargo run -p strategynotes-server -- serve /tmp/sn 8787 &
+pnpm -C ui dev    # UI at http://localhost:5173 (proxies /api -> 8787)
+
+# Lint (strict — must be clean)
+cargo clippy --workspace --all-targets -- -D warnings
+```
+
+### Desktop (Tauri)
+The `src-tauri/` shell wraps the React UI and spawns the local backend. It
+requires system webview deps (Linux: `libwebkit2gtk-4.1-dev`). The build env
+for this repo lacks them, so the Tauri build is EV-SKIP there; on a depped
+machine:
+
+```bash
+sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev
+cd src-tauri && cargo run
+```
+
+### Architecture
+Ports & Adapters (hexagonal). The `core/` crate is pure — no I/O, no DB, no
+HTTP. `adapters/` implements the driven ports (markdown vault, SQLite index,
+daynotes, clock, minter, calendar providers). `server/` is the driving layer
+(CLI + axum HTTP). `ui/` is a driving adapter (React). Every gate is evaluated
+in the core before any state change; the UI never decides approval.
 
 <!-- Placeholder: user guide, examples, support contact, and license. -->

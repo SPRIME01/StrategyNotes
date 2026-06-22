@@ -731,3 +731,57 @@ Fidelity notes:
 Remaining gaps: confirmed in FINISH_LINE_PLAN.md (8 items; one out of scope).
 
 Status: Accepted
+
+---
+
+## EV-012 — Phases B-H finish-line (INV-BODY, Capacity, agents, FTS, UI, Tauri, calendar, conformance)
+
+Date: 2026-06-22
+Slices: S-BODY-001, S-CAP-001, S-AGENT-HTTP, S-SEARCH-001, S-UI-ORGANISMS,
+         S-TAURI-SCAFFOLD, S-CAL-001, S-CONFIRM-002
+Spec IDs: INV-BODY, INV-CAL, all gate INVs, PRD-025/026/027/028, SDS-*
+
+Commands run:
+```bash
+cargo test --workspace                                  # 107 passed, 0 failed
+cargo build --workspace                                 # clean
+cargo clippy --workspace --all-targets -- -D warnings   # clean
+pnpm -C ui test                                         # 2 files, 2 passed
+pnpm -C ui build                                        # 153 kB, clean
+```
+
+Result summary:
+```text
+Baseline 77 -> 107 tests (+30 across Phases B,C,D,G + UI).
+INV-BODY closed: parse_body + body_refs table + backlinks UNION
+  (TST-BODY-001..006: wikilink/single-tag/multi-tag/block-ref/rebuild/backlinks).
+Strategy Capacity gate closed: can_meet_strategy_capacity
+  (TST-CAP-001..004: pass/required-le/override-needs-sdr/blocked-shape).
+Agent quarantine HTTP: 5 endpoints + 4 TST-AGENT-HTTP tests
+  (no auto-accept path proven).
+FTS search: derived search_text + LIKE + GET /api/search
+  (TST-SEARCH-001..005 + case-insensitive).
+UI organisms: 8 required + Agent Draft Inbox; tabbed shell; component test.
+Tauri: scaffold (Option A subprocess); build/run EV-SKIP (webkit2gtk missing).
+Calendar contracts: CalendarProvider + 5 adapters
+  (Internal/ICS/Google-stub/Outlook-stub/iCloud-stub); TST-CAL-001..005.
+Conformance: cargo test/build/clippy -D warnings all clean.
+```
+
+Evidence types: EV-TST (107), EV-BLD (cargo+pnpm+clippy), EV-LINT (clippy
+-D warnings clean), EV-UI (organisms build + component test), EV-SKIP (Tauri
+build/run — webkit2gtk-4.1-dev absent; real calendar providers — no creds).
+
+Fidelity notes:
+- No existing invariant weakened. All 18 INV-* have executable proofs
+  (CONFORMANCE.md table).
+- clippy --all-targets -- -D warnings passes clean (style + unused-import
+  warnings fixed during Phase H).
+- The "do not claim complete if" guard (directive) — none of the failure
+  conditions hold (CONFORMANCE.md).
+
+Honest remaining gaps (KNOWN_LIMITATIONS.md): Tauri run (EV-SKIP, env), real
+calendar providers (EV-SKIP, no creds), title-resolution for [[wikilink]],
+capacity-ledger UI surface, UI design polish.
+
+Status: Accepted

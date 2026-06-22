@@ -1,40 +1,41 @@
 # AGENT_STATE.md
 
 Living state for agents working in this repo. NOT a source of truth (precedence
-#7 per PLAN sec 1). Update every slice.
+#7 per PLAN sec 1).
 
-Last updated: 2026-06-22
+Last updated: 2026-06-22 (finish-line build complete)
 
-## Current phase
-Finish-line build (past MVP). Phase A (baseline) complete; Phase B (core
-integrity gaps) in progress.
+## Status
+Finish-line build (Phases A-H) complete. See CONFORMANCE.md for the final
+acceptance checklist and KNOWN_LIMITATIONS.md for honest gaps.
 
-## Current slice
-S-BODY-001 — INV-BODY inline parsing ([[wikilink]], #tag, #[[multi word tag]],
-((block_ref))). Next: TDD the parser, wire body refs into the derived index +
-backlinks, prove rebuild restores them.
+## Conformance gate
+```
+cargo test --workspace ... 107 passed, 0 failed
+cargo build --workspace ... clean
+cargo clippy --workspace --all-targets -- -D warnings ... clean
+pnpm -C ui test/build ... clean
+```
 
-## What works (baseline, EV-011)
-- 77 cargo tests green; cargo build + pnpm build clean.
-- CLI spine runs end-to-end (all 6 gates fire).
-- HTTP API (16 endpoints) on axum; create-case + list-cases smoke-verified.
-- React UI spine runner builds.
-- All 18 INV-* have executable proofs (EV-010 table).
+## What landed this build
+- INV-BODY inline parsing (B1) + index integration + backlinks.
+- Strategy Capacity gate with SDR override (B2).
+- Agent quarantine HTTP endpoints (C) — no auto-accept path.
+- FTS search (D) — derived, rebuildable.
+- 8 UI organisms + Agent Draft Inbox + tabbed shell (E).
+- Tauri scaffold (F) — EV-SKIP build/run (webkit2gtk missing).
+- CalendarProvider + 5 adapters (G) — INV-CAL boundary.
+- Conformance docs (H) — CONFORMANCE/KNOWN_LIMITATIONS/README/evidence EV-012.
 
-## Next action
-Phase B1 INV-BODY → B2 Strategy Capacity gate → C agent endpoints → D FTS →
-E UI organisms → F Tauri → G calendar contracts → H conformance.
+## Next action (recommendation for next release)
+1. Depped machine: build/run Tauri (EV-SKIP here); add icon set.
+2. Title→id resolution for [[wikilink]] (KNOWN_LIMITATIONS #7).
+3. Real calendar providers behind feature flags (KNOWN_LIMITATIONS #2).
+4. UI design polish: split organisms.tsx into atomic library + design tokens.
+5. FTS5 upgrade (KNOWN_LIMITATIONS #4).
 
-## Blockers
-None.
-
-## Non-negotiables locked
+## Non-negotiables (still locked)
 No core rewrite without failing test; no invariant weakening; markdown = truth;
 SQLite = derived; providers never source of truth; agent output quarantined;
 work needs package+pomo+timebox; timebox needs review; value needs proof;
 no done-without-evidence.
-
-## Deferred (honest)
-- Tauri desktop RUN (no display in env; build-only verification).
-- Real calendar provider smoke (no credentials; mock contracts only).
-- UI screenshot verification (component tests + manual notes).
