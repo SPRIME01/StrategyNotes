@@ -13,7 +13,7 @@ pub fn acceptance_failures(e: &EvidenceItem) -> Vec<String> {
     let has_manual = e
         .manual_basis_reviewer
         .as_ref()
-        .map_or(false, |r| !r.trim().is_empty());
+        .is_some_and(|r| !r.trim().is_empty());
 
     if !has_source && !has_manual {
         failed.push(

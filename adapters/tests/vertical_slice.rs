@@ -15,7 +15,7 @@ use strategynotes_adapters::{DaynoteEventSink, MarkdownVault, SQLiteIndex, Syste
 use strategynotes_core::evidence::{EvidenceKind, ProofLevel};
 use strategynotes_core::execution::{Completion, PomoEstimate};
 use strategynotes_core::ics::export_timebox_to_ics;
-use strategynotes_core::ports::{DerivedIndex, NodeVault};
+use strategynotes_core::ports::DerivedIndex;
 use strategynotes_core::services::App;
 use strategynotes_core::trace::reachable_via_spine;
 use strategynotes_core::{AttentionMode, EdgeType, GateResult, PomoPattern};

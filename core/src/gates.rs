@@ -61,13 +61,13 @@ pub fn can_approve_bet(bet: &StrategyBet) -> GateResult {
     if !bet.counterevidence_reviewed {
         failed.push("counterevidence not reviewed");
     }
-    if bet.success_metric.as_deref().map_or(true, |s| s.trim().is_empty()) {
+    if bet.success_metric.as_deref().is_none_or(|s| s.trim().is_empty()) {
         failed.push("missing success metric");
     }
-    if bet.kill_criteria.as_deref().map_or(true, |s| s.trim().is_empty()) {
+    if bet.kill_criteria.as_deref().is_none_or(|s| s.trim().is_empty()) {
         failed.push("missing kill criteria");
     }
-    if bet.owner.as_deref().map_or(true, |s| s.trim().is_empty()) {
+    if bet.owner.as_deref().is_none_or(|s| s.trim().is_empty()) {
         failed.push("missing owner");
     }
     if failed.is_empty() {
@@ -95,10 +95,10 @@ pub fn can_commit_work_package(wp: &WorkPackage) -> GateResult {
     if wp.tools.is_empty() {
         failed.push("missing tools");
     }
-    if wp.technique.as_deref().map_or(true, |s| s.trim().is_empty()) {
+    if wp.technique.as_deref().is_none_or(|s| s.trim().is_empty()) {
         failed.push("missing technique");
     }
-    if wp.exception_policy.as_deref().map_or(true, |s| s.trim().is_empty()) {
+    if wp.exception_policy.as_deref().is_none_or(|s| s.trim().is_empty()) {
         failed.push("missing exception policy");
     }
     if wp.evidence_required.is_empty() {
@@ -130,14 +130,14 @@ pub fn can_verify_timebox(review: &TimeboxReview) -> GateResult {
     let has_reason = review
         .no_evidence_reason
         .as_deref()
-        .map_or(false, |s| !s.trim().is_empty());
+        .is_some_and(|s| !s.trim().is_empty());
     if !has_evidence && !has_reason {
         failed.push("missing evidence link or explicit no-evidence reason");
     }
     if review
         .next_action
         .as_deref()
-        .map_or(true, |s| s.trim().is_empty())
+        .is_none_or(|s| s.trim().is_empty())
     {
         failed.push("missing next action decision");
     }

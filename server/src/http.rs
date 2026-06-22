@@ -341,12 +341,6 @@ async fn validate_value(
 
 // ---- agent runs (INV-HUMAN quarantine) ----
 
-#[derive(Deserialize)]
-struct CreateAgentRunBody {
-    agent: String,
-    summary: String,
-}
-
 async fn list_agent_runs(
     State(st): State<Arc<ServerState>>,
 ) -> Result<Json<Vec<String>>, AppError> {

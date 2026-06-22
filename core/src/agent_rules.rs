@@ -10,7 +10,7 @@ use crate::gate::GateResult;
 /// completed state or no approver is named.
 pub fn can_accept_agent_run(run: &AgentRun, human_approver: Option<&str>) -> GateResult {
     let mut failed: Vec<&'static str> = Vec::new();
-    let approver_present = human_approver.map_or(false, |s| !s.trim().is_empty());
+    let approver_present = human_approver.is_some_and(|s| !s.trim().is_empty());
     if !approver_present {
         failed.push("missing human approver (agents cannot self-accept)");
     }

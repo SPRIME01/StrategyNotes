@@ -1,0 +1,35 @@
+# StrategyNotes Tauri desktop shell (standalone crate - NOT in the parent
+# workspace, because building Tauri requires system webview deps that the
+# build env lacks; see EVIDENCE.md Phase F for the EV-SKIP reason).
+#
+# To build/run on a machine with webkit2gtk-4.1-dev installed:
+#   sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev
+#   cd src-tauri && cargo build --release
+#   (or use `tauri dev` / `tauri build` from the Tauri CLI)
+#
+# Architecture: Option A (directive) - the shell spawns the existing axum
+# server as a subprocess and loads the React UI in a webview. The UI's vite
+# proxy forwards /api -> 127.0.0.1:8787 (the backend). No server refactor.
+
+[package]
+name = "strategynotes-tauri"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+# Empty - exclude this crate from the parent workspace so `cargo build
+# --workspace` (the conformance gate) stays green in envs without webkit2gtk.
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["blocking"] }
+
+[[bin]]
+name = "strategynotes-desktop"
+path = "src/main.rs"

@@ -13,8 +13,8 @@ use strategynotes_core::gates::{
     can_commit_work_package, can_verify_timebox,
 };
 use strategynotes_core::gate::GateResult;
-use strategynotes_core::strategy::{BetStatus, ChoiceLevel, ChoiceCascade, StrategicClaim};
-use strategynotes_core::{Assumption, NodeId, OutcomeRequirement, StrategyBet};
+use strategynotes_core::strategy::{BetStatus, StrategicClaim};
+use strategynotes_core::{NodeId, StrategyBet};
 
 fn id(s: &str) -> NodeId {
     NodeId::parse(s).unwrap()

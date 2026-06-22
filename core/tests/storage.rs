@@ -122,5 +122,5 @@ fn typed_edges_round_trip_through_frontmatter() {
 fn set_edges_with_empty_list_clears_the_key() {
     let mut node = from_markdown("---\nid: 01HZX8KQBJ9GYWN3QFVYRXTXMS\ntype: note\nedges: []\n---\nb\n").unwrap();
     set_edges(&mut node, &[]).unwrap();
-    assert!(node.frontmatter.get("edges").is_none());
+    assert!(!node.frontmatter.contains_key("edges"));
 }
