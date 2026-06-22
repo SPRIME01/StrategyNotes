@@ -463,3 +463,79 @@ Fidelity notes:
   choice actually exist?", layer in via the index when services are wired.)
 
 Status: Accepted
+
+---
+
+## EV-008 — Phase 8-11 services + PLAN sec 15 vertical slice (the spine proven)
+
+Date: 2026-06-21
+Slice: S-VSLICE-001 (+ services, ICS export, TypedView bridge, trivial adapters)
+Spec IDs: PRD-008..014, PRD-017..024, SDS-WORK, SDS-TIME, SDS-CAL, SDS-EXEC,
+         INV-EVID, INV-BET, INV-WORK, INV-TIME, INV-REVIEW, INV-VALUE, INV-CAL,
+         INV-DUR, INV-DAY, TST-STRAT, TST-WORK, TST-TIME, TST-TRACE
+
+Commands run:
+```bash
+cargo test --workspace
+```
+
+Result:
+```text
+TOTAL: 72 passed, 0 failed
+  vertical_slice ..... 2 passed  <- the full spine + INV-DUR-after-loss
+  gates .............. 16 passed
+  trace .............. 4 passed
+  case_lifecycle ..... 6 passed (unit) + 3 (integration)
+  evidence_rules ..... 4 passed (unit)
+  graph .............. 6 passed
+  storage ............ 9 passed
+  contracts .......... 6 passed
+  smoke .............. 1 passed
+  markdown_vault ..... 7 passed
+  sqlite_index ....... 4 passed
+  daynote_sink ....... 4 passed
+```
+
+The vertical slice (`full_strategy_spine_end_to_end`) exercises, against REAL
+adapters in a tempdir:
+  create case -> source -> chunk -> evidence -> accept [INV-EVID passes]
+  -> claim -> bet -> FAIL approve [INV-BET blocks, lists every missing field]
+  -> fill bet fields -> approve [INV-BET passes, SDR created]
+  -> work package -> FAIL commit [INV-WORK blocks] -> fill -> commit [passes]
+  -> schedule timebox (pomo estimate + slot) -> ICS export (RFC 5545)
+  -> review + verify [INV-REVIEW passes] -> value claim -> validate [INV-VALUE passes]
+  -> rebuild index from markdown -> trace source-chunk -> value claim REACHES it
+  -> daynote ledger captured created/accepted/verified events
+
+Files added:
+- core/src/services.rs - App struct (vault + sink + minter + clock) with spine
+  methods: create_case, add_source/chunk, extract_evidence, accept_evidence,
+  create_claim, draft_bet, approve_bet, create_work_package, commit_work_package,
+  schedule_timebox, review_and_verify_timebox, claim_value, validate_value,
+  link (typed-edge wiring), mutate_bet/mutate_work_package. Every state-changing
+  method calls its gate BEFORE mutating; Blocked => no mutation.
+- core/src/views.rs - TypedView trait + impls for 13 domain structs (the typed-
+  view <-> Node bridge, centralized).
+- core/src/ics.rs - export_timebox_to_ics (pure RFC 5545 VEVENT/VCALENDAR).
+- adapters/src/trivial.rs - SystemClock (Clock) + UlidMinter (IdMinter).
+- adapters/tests/vertical_slice.rs - the 2 end-to-end tests.
+
+Fidelity notes:
+- Backend-owns-gates is END-TO-END REAL: the slice calls app.accept_evidence /
+  approve_bet / commit_work_package / review_and_verify_timebox / validate_value
+  and each returns the actual GateResult; nothing is approved by assertion.
+- INV-DUR end-to-end: the second test drops the SQLite index, rebuilds from the
+  markdown vault, and the source->evidence trace still resolves.
+- INV-CAL: ICS export is pure local text; no provider required for the commitment.
+- Empty-string theater is caught (the gate tests in EV-007 + the slice's FAIL
+  step prove incomplete objects cannot pass).
+- The spine is EDGE-CONNECTED: trace from the source chunk reaches the value
+  claim via supports/derives_from/requires/scheduled_by/reviewed_by/validates.
+
+Remaining gaps (honest):
+- No Tauri shell yet (S-PHASE0-002) - the app runs as a test, not a window.
+- No UI (Phase 12) - the spine is exercised programmatically, not visually.
+- Agent draft quarantine (Phase 13), full value-realization UI (Phase 14),
+  observability/conformance (Phase 15) - not started.
+
+Status: Accepted

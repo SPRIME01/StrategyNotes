@@ -1,0 +1,15 @@
+[package]
+name = "strategynotes-server"
+version = "0.0.0"
+edition = "2021"
+description = "StrategyNotes driving layer: CLI + HTTP server exposing the App services."
+publish = false
+
+[[bin]]
+name = "strategynotes"
+path = "src/main.rs"
+
+[dependencies]
+strategynotes-core = { path = "../core" }
+strategynotes-adapters = { path = "../adapters" }
+chrono = { version = "0.4", features = ["serde"] }

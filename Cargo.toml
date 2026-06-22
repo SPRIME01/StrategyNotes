@@ -4,4 +4,4 @@
 
 [workspace]
 resolver = "2"
-members = ["core", "adapters"]
+members = ["core", "adapters", "server"]

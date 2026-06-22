@@ -490,6 +490,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "strategynotes-server"
+version = "0.0.0"
+dependencies = [
+ "chrono",
+ "strategynotes-adapters",
+ "strategynotes-core",
+]
+
+[[package]]
 name = "syn"
 version = "2.0.118"
 source = "registry+https://github.com/rust-lang/crates.io-index"
