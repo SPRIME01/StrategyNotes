@@ -41,3 +41,6 @@ src-tauri/gen/
 .env
 .env.*
 !.env.example
+
+# Local runtime data (the dev vault/index/daynotes created by `strategynotes serve`)
+strategynotes-data/
