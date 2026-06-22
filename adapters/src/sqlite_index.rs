@@ -42,10 +42,10 @@ impl SQLiteIndex {
     fn init(conn: &Connection) -> Result<(), Error> {
         conn.execute_batch(
             "            CREATE TABLE IF NOT EXISTS nodes (
-                id          TEXT PRIMARY KEY,
-                type        TEXT NOT NULL,
-                body        TEXT NOT NULL,
-                search_text TEXT NOT NULL DEFAULT ''
+                id    TEXT PRIMARY KEY,
+                type  TEXT NOT NULL,
+                body  TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT ''
             );
             CREATE TABLE IF NOT EXISTS edges (
                 from_id   TEXT NOT NULL,
@@ -54,8 +54,9 @@ impl SQLiteIndex {
                 status    TEXT NOT NULL,
                 PRIMARY KEY (from_id, to_id, edge_type)
             );
-            CREATE INDEX IF NOT EXISTS idx_edges_to   ON edges(to_id);
-            CREATE INDEX IF NOT EXISTS idx_nodes_type ON nodes(type);
+            CREATE INDEX IF NOT EXISTS idx_edges_to     ON edges(to_id);
+            CREATE INDEX IF NOT EXISTS idx_nodes_type   ON nodes(type);
+            CREATE INDEX IF NOT EXISTS idx_nodes_title  ON nodes(title);
             CREATE TABLE IF NOT EXISTS body_refs (
                 from_id TEXT NOT NULL,
                 kind    TEXT NOT NULL,
@@ -73,15 +74,35 @@ impl DerivedIndex for SQLiteIndex {
         let nodes = vault.all()?;
         let mut conn = self.conn.lock().unwrap();
         let tx = conn.transaction().map_err(rusqlite_err)?;
-        tx.execute_batch("DELETE FROM edges; DELETE FROM nodes; DELETE FROM body_refs;")
-            .map_err(rusqlite_err)?;
+        // FTS5 index is rebuilt from scratch each time (contentless virtual table).
+        tx.execute_batch(
+            "DELETE FROM edges; DELETE FROM nodes; DELETE FROM body_refs;
+             DROP TABLE IF EXISTS nodes_fts;
+             CREATE VIRTUAL TABLE nodes_fts USING fts5(
+                 node_id UNINDEXED, type UNINDEXED, content,
+                 tokenize = 'unicode61'
+             );",
+        )
+        .map_err(rusqlite_err)?;
         for node in &nodes {
             let id = node.id.to_lexical();
             let ty = snake_case_name(node.ty);
-            let stext = strategynotes_core::search::search_text_of(node);
+            let title = node
+                .frontmatter
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            // FTS5 content = body + key frontmatter fields (title/thesis/
+            // statement/objective/...). unicode61 handles case-folding.
+            let fts_content = strategynotes_core::search::search_text_of(node);
             tx.execute(
-                "INSERT OR REPLACE INTO nodes (id, type, body, search_text) VALUES (?1, ?2, ?3, ?4)",
-                params![id, ty, node.body, stext],
+                "INSERT OR REPLACE INTO nodes (id, type, body, title) VALUES (?1, ?2, ?3, ?4)",
+                params![id, ty, node.body, title],
+            )
+            .map_err(rusqlite_err)?;
+            tx.execute(
+                "INSERT INTO nodes_fts (node_id, type, content) VALUES (?1, ?2, ?3)",
+                params![id, ty, fts_content],
             )
             .map_err(rusqlite_err)?;
             for edge in format::edges_of(node)? {
@@ -112,21 +133,41 @@ impl DerivedIndex for SQLiteIndex {
 
     fn backlinks(&self, id: &NodeId) -> Result<Vec<NodeId>, Error> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn
-            .prepare(
-                "SELECT from_id FROM edges WHERE to_id = ?1
-                 UNION
-                 SELECT from_id FROM body_refs WHERE target = ?1",
+        let id_lex = id.to_lexical();
+        // Title of the target node, so [[Title]] wikilinks resolve to it.
+        let title: String = conn
+            .query_row(
+                "SELECT title FROM nodes WHERE id = ?1",
+                [&id_lex],
+                |r| r.get::<_, String>(0),
             )
-            .map_err(rusqlite_err)?;
-        let rows: Result<Vec<NodeId>, Error> = stmt
-            .query_map([id.to_lexical()], |r| r.get::<_, String>(0))
-            .map_err(rusqlite_err)?
-            .map(|r| {
-                let s = r.map_err(rusqlite_err)?;
-                NodeId::parse(&s).map_err(Error::from)
-            })
-            .collect();
+            .unwrap_or_default();
+        // Backlinks = typed edges + body refs by id + body refs by title
+        // (so [[GodSpeed MVP]] in a body surfaces as a backlink on the node
+        // whose title is "GodSpeed MVP").
+        let sql = if title.is_empty() {
+            "SELECT from_id FROM edges WHERE to_id = ?1
+             UNION
+             SELECT from_id FROM body_refs WHERE target = ?1"
+        } else {
+            "SELECT from_id FROM edges WHERE to_id = ?1
+             UNION
+             SELECT from_id FROM body_refs WHERE target = ?1
+             UNION
+             SELECT from_id FROM body_refs WHERE target = ?2"
+        };
+        let mut stmt = conn.prepare(sql).map_err(rusqlite_err)?;
+        let rows: Result<Vec<NodeId>, Error> = if title.is_empty() {
+            stmt.query_map([&id_lex], |r| r.get::<_, String>(0))
+                .map_err(rusqlite_err)?
+                .map(|r| { let s = r.map_err(rusqlite_err)?; NodeId::parse(&s).map_err(Error::from) })
+                .collect()
+        } else {
+            stmt.query_map(params![&id_lex, &title], |r| r.get::<_, String>(0))
+                .map_err(rusqlite_err)?
+                .map(|r| { let s = r.map_err(rusqlite_err)?; NodeId::parse(&s).map_err(Error::from) })
+                .collect()
+        };
         rows
     }
 
@@ -199,27 +240,34 @@ impl DerivedIndex for SQLiteIndex {
     }
 
     fn search(&self, query: &str) -> Result<Vec<strategynotes_core::search::SearchResult>, Error> {
-        let needle = format!("%{}%", query.to_lowercase());
+        // FTS5 MATCH. node_id/type UNINDEXED (col 0/1); content=2.
+        // snippet() excerpts the content blob (col 2) around the match.
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn
-            .prepare("SELECT id, type, body FROM nodes WHERE search_text LIKE ?1 ORDER BY id")
-            .map_err(rusqlite_err)?;
-        let rows = stmt
-            .query_map([&needle], |r| {
-                Ok((
-                    r.get::<_, String>(0)?,
-                    r.get::<_, String>(1)?,
-                    r.get::<_, String>(2)?,
-                ))
-            })
-            .map_err(rusqlite_err)?;
+        let sql = "SELECT node_id, type, snippet(nodes_fts, 2, '«', '»', '…', 12) \
+                   FROM nodes_fts WHERE nodes_fts MATCH ?1 ORDER BY rank";
+        let mut stmt = match conn.prepare(sql) {
+            Ok(s) => s,
+            // Malformed FTS5 query (special chars) -> empty results, not a crash.
+            Err(_) => return Ok(Vec::new()),
+        };
+        let rows = match stmt.query_map(params![query], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?))
+        }) {
+            Ok(rs) => rs,
+            Err(_) => return Ok(Vec::new()),
+        };
         let mut out = Vec::new();
         for row in rows {
-            let (id_s, ty_s, body) = row.map_err(rusqlite_err)?;
-            let id = NodeId::parse(&id_s).map_err(Error::from)?;
-            let ty: NodeType = from_snake_case::<NodeType>(&ty_s)?;
-            let excerpt = body.chars().take(120).collect::<String>();
-            out.push(strategynotes_core::search::SearchResult { id: id.to_lexical(), ty, excerpt });
+            let (id_s, ty_s, excerpt) = match row {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let ty: NodeType = from_snake_case::<NodeType>(&ty_s).unwrap_or(NodeType::Note);
+            out.push(strategynotes_core::search::SearchResult {
+                id: id_s,
+                ty,
+                excerpt,
+            });
         }
         Ok(out)
     }

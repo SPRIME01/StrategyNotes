@@ -80,3 +80,30 @@ fn tst_body_rebuild_after_wipe_restores_refs() {
     let after = idx2.body_refs_of(&NodeId::parse(A).unwrap()).unwrap().len();
     assert_eq!(before, after, "body refs survive index loss + rebuild");
 }
+
+#[test]
+fn tst_body_007_wikilink_by_title_resolves_to_node() {
+    // [[Title]] in A's body must surface as a backlink on the node whose
+    // frontmatter title is "Title" - closing the title->id resolution gap.
+    use strategynotes_core::node::NodeType;
+    let tmp = tempfile::tempdir().unwrap();
+    let vault = MarkdownVault::open(tmp.path()).unwrap();
+    // A: a note whose body wikilinks by title.
+    vault.put(&note(A, "see [[GodSpeed MVP]] for context")).unwrap();
+    // B: a strategy_case whose frontmatter title is "GodSpeed MVP".
+    let mut b_node = note(B, "case body");
+    b_node.ty = NodeType::StrategyCase;
+    b_node.frontmatter.insert(
+        "title".into(),
+        serde_yaml::Value::String("GodSpeed MVP".into()),
+    );
+    vault.put(&b_node).unwrap();
+
+    let idx = SQLiteIndex::open_in_memory().unwrap();
+    idx.rebuild(&vault).unwrap();
+    let back = idx.backlinks(&NodeId::parse(B).unwrap()).unwrap();
+    assert!(
+        back.contains(&NodeId::parse(A).unwrap()),
+        "A's [[GodSpeed MVP]] wikilink must resolve to B via title: {back:?}"
+    );
+}
