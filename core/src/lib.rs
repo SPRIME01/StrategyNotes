@@ -15,6 +15,7 @@
 pub mod case_lifecycle;
 pub mod error;
 pub mod evidence;
+pub mod evidence_rules;
 pub mod execution;
 pub mod format;
 pub mod gate;
@@ -26,6 +27,7 @@ pub mod node;
 pub mod ports;
 pub mod strategy;
 pub mod time;
+pub mod trace;
 
 pub use error::Error;
 pub use evidence::{

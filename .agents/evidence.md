@@ -355,3 +355,58 @@ Fidelity notes:
   contradicts, etc.) are not structural and do not affect cloning.
 
 Status: Accepted
+
+---
+
+## EV-006 — Phase 5 case lifecycle + typed-view bridge (S-STRAT-001)
+
+Date: 2026-06-21
+Slice: S-STRAT-001
+Spec IDs: PRD-008, PRD-011, PRD-016, PRD-017, SDS-STRAT, TST-STRAT
+
+Commands run:
+```bash
+cargo test --workspace
+```
+
+Result:
+```text
+strategynotes-core:
+  case_lifecycle (unit) . 6 passed  (closed-is-terminal, forward path allowed,
+                                     skip-ahead rejected, Review reachable
+                                     from any phase, feedback loops, close-
+                                     only-from-Review)
+  case_domain .......... 3 passed  (case round-trips through Node, survives
+                                     full markdown round-trip, new() starts in
+                                     EstablishReality)
+TOTAL workspace: 46 passed, 0 failed
+```
+
+Files added/changed:
+- core/src/case_lifecycle.rs - allowed_next(phase) / can_transition(from, to).
+  Forward path EstablishReality->...->Closed + feedback loops + Review-as-hub +
+  Close-only-from-Review. Pure data; gate enforcement is Phase 7.
+- core/src/format.rs - frontmatter_from / frontmatter_to: generic typed-view <->
+  Frontmatter map bridge. value_to_map / map_to_value helpers.
+- core/src/strategy.rs - impl StrategyCase { new, to_node, from_node }. id field
+  marked #[serde(skip)] (lives in Node.id, not frontmatter); set explicitly by
+  to_node/from_node. Default added to NodeId to satisfy serde-skip.
+- core/src/identity.rs - derived Default on NodeId (Ulid::default placeholder;
+  always overwritten by from_node).
+
+Fidelity notes:
+- A StrategyCase survives the FULL storage stack: typed view -> Node -> markdown
+  text -> re-parsed Node -> typed view (case_domain.rs test). This is the
+  contract every other typed view (EvidenceItem, StrategyBet, ...) will use.
+- Lifecycle state machine is the structural transition graph only; the gate
+  engine (Phase 7) adds "does this case have enough evidence/outcomes/bets to
+  actually advance?" enforcement on top.
+
+Remaining gaps:
+- Artifact view aggregation (collect ERD/ORD/SLD/etc. nodes linked to a case
+  via DerivedIndex) folds into Phase 6 where evidence/claims exist to aggregate.
+- MCGCS dimension model (Mission/Climate/Ground/Command/Systems) + choice
+  cascade assembly - deferred to a Phase 5 sub-slice; the NodeType slots exist.
+- Actor/Ranking model - deferred.
+
+Status: Accepted
