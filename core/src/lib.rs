@@ -14,6 +14,7 @@
 
 pub mod agent_rules;
 pub mod body;
+pub mod capacity;
 pub mod case_lifecycle;
 pub mod error;
 pub mod evidence;
