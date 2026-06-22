@@ -10,6 +10,7 @@ use crate::error::Error;
 use crate::governance::ActivityEvent;
 use crate::identity::NodeId;
 use crate::node::{Node, TypedEdge};
+use chrono::{DateTime, Utc};
 
 // ---- existing (Phase 0) ----
 
@@ -18,6 +19,11 @@ use crate::node::{Node, TypedEdge};
 pub trait Clock {
     /// Current time as Unix-epoch seconds (UTC).
     fn now_unix_seconds(&self) -> i64;
+
+    /// Current time as a typed UTC instant (derived from `now_unix_seconds`).
+    fn now(&self) -> DateTime<Utc> {
+        DateTime::from_timestamp(self.now_unix_seconds(), 0).unwrap_or_default()
+    }
 }
 
 // ---- Phase 1 additions ----

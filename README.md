@@ -1,239 +1,187 @@
 # StrategyNotes
 
-**A local-first, markdown-native strategic knowledge and execution system.**
+**Turn uncertain situations into defensible decisions, focused action, and proof of what worked.**
 
-StrategyNotes connects research, decisions, execution, and learning in one durable graph. It helps individuals and teams build strategies from evidence, turn approved choices into timeboxed work, review what happened, and trace value claims back to their proof.
+Strategy work rarely fails because people lack ideas. It fails because evidence is scattered, assumptions go unchallenged, decisions lose their rationale, plans compete for time, and execution produces activity without learning.
+
+StrategyNotes keeps the whole journey connected:
+
+```text
+Understand reality -> make a choice -> commit the time -> do the work -> learn -> prove value
+```
 
 > A strategy is not real until it has evidence. An action is not real until it has a timebox.
 
 <!-- Placeholder: product screenshot or short demo. -->
 
-## Why StrategyNotes
+## The Problems It Solves
 
-Most tools separate notes, strategy documents, task lists, calendars, and review records. That separation breaks the chain between what you learned, what you chose, what you committed to, and what created value.
+### Your evidence is everywhere
 
-StrategyNotes keeps that chain intact:
+Reports live in folders. Interviews live in transcripts. Notes live in notebooks. Important context lives in someone's memory. By the time a decision is made, nobody can tell which claims came from evidence and which came from confident opinion.
 
-```text
-source -> evidence -> comparison -> choice -> bet -> experiment
-       -> work package -> timebox -> execution -> review -> value claim
-```
+StrategyNotes brings sources, observations, claims, and contradictions into one case. You can see what supports a conclusion, what weakens it, and what remains unknown.
 
-Every item in the chain is a linked, addressable markdown node. Typed relationships make the reasoning traceable in both directions.
+**Outcome:** make decisions from the available reality instead of reconstructing it from memory.
 
-StrategyNotes imposes two prices:
+### Strategy documents become stale the moment work begins
 
-| Price | Rule |
+The final deck records what the team believed at one moment. It rarely shows which assumptions failed, what evidence changed, or why the strategy evolved.
+
+StrategyNotes treats strategy as a living case. Evidence, choices, bets, experiments, work, and reviews stay connected as the situation changes.
+
+**Outcome:** preserve the reasoning behind the strategy without maintaining another static document.
+
+### Priorities never become real commitments
+
+Backlogs make it easy to call everything important. They do not force a choice about what your limited time can actually support.
+
+StrategyNotes requires an effort estimate and a calendar block before work becomes committed. The calendar becomes an honest record of what you chose to fund with time.
+
+**Outcome:** expose overcommitment early and turn priorities into scheduled action.
+
+### Execution keeps reopening settled decisions
+
+People lose focus when every work session becomes another planning session. New ideas, missing inputs, and strategic questions pull attention away from the output that was supposed to be produced.
+
+StrategyNotes turns approved work into a clear runbook: inputs, method, expected output, stop conditions, and a place to capture exceptions without chasing them.
+
+**Outcome:** stay focused during execution while preserving important discoveries for review.
+
+### Work gets reported, but little gets learned
+
+Teams record whether something shipped. They rarely compare estimated effort with actual effort, examine friction, attach proof, or update the underlying strategy.
+
+StrategyNotes closes every work block with a short review. Results become evidence, open questions, decisions, or the next piece of work.
+
+**Outcome:** turn execution into cumulative learning instead of a stream of disconnected tasks.
+
+### Value claims are hard to defend
+
+When someone asks what changed, teams often answer with outputs, anecdotes, or activity metrics. The path from source evidence to decision to result has disappeared.
+
+StrategyNotes preserves that path. Trace any value claim back through the work, experiment, strategic bet, reasoning, and source evidence that supports it.
+
+**Outcome:** communicate value with proof and show what remains uncertain.
+
+## Hire StrategyNotes When You Need To
+
+### Make sense of a messy strategic situation
+
+When information is scattered and the situation is unclear, use StrategyNotes to:
+
+- define the decision you are actually trying to make;
+- gather sources without losing their origin or context;
+- separate observations from interpretations and hypotheses;
+- keep counterevidence visible;
+- identify the gaps that matter before choosing a direction.
+
+### Choose a direction you can defend
+
+When several paths look plausible, use StrategyNotes to:
+
+- compare the current path with real alternatives;
+- expose what must be true for each option to work;
+- connect important claims to supporting and contradicting evidence;
+- define success measures and kill criteria before approval;
+- preserve what was decided, why, and by whom.
+
+### Turn strategy into work people can execute
+
+When a strategy is clear but action remains vague, use StrategyNotes to:
+
+- break choices into bounded work packages;
+- specify inputs, outputs, tools, methods, and proof requirements;
+- estimate the attention and time the work will cost;
+- reserve that cost on the calendar;
+- prevent more work from being committed than capacity allows.
+
+### Protect focus while the work is happening
+
+When execution is vulnerable to distraction and scope drift, use StrategyNotes to:
+
+- start each timebox with a prepared runbook;
+- keep the expected output and stop conditions visible;
+- capture ideas and exceptions without abandoning the plan;
+- stop and escalate when missing inputs or risks make continuation unsafe;
+- attach the evidence produced during the session.
+
+### Learn whether the strategy is working
+
+When activity is high but confidence is low, use StrategyNotes to:
+
+- compare estimated and actual effort;
+- record what worked, what failed, and what caused friction;
+- update assumptions when reality contradicts the plan;
+- decide what to continue, change, split, or stop;
+- carry each lesson into the next decision and work block.
+
+### Use AI without giving up control
+
+When agents can accelerate research and drafting but should not make strategy for you, use StrategyNotes to:
+
+- ask agents to organize evidence, find contradictions, critique assumptions, and draft options;
+- inspect the inputs and outputs behind agent work;
+- keep agent suggestions separate from accepted strategy;
+- require a human decision before anything is approved.
+
+## What Changes
+
+| Before StrategyNotes | With StrategyNotes |
 |---|---|
-| Epistemic | A claim without evidence cannot be accepted. |
-| Execution | Work without an estimated cost and calendar timebox cannot be committed. |
+| Evidence is scattered across tools and memories. | Claims stay connected to sources, context, and counterevidence. |
+| Strategy is a presentation that drifts away from reality. | Strategy evolves as evidence, decisions, and results change. |
+| Everything in the backlog appears important. | Work becomes real only when time and capacity are committed. |
+| Execution repeatedly turns into replanning. | Prepared runbooks protect focus and capture exceptions for review. |
+| Progress means activity or filled-in sections. | Progress means passing evidence, decision, execution, and review gates. |
+| Retrospectives are optional and disconnected. | Every executed timebox feeds learning back into the strategy. |
+| Value is asserted after the fact. | Value claims trace back to decisions, work, and proof. |
+| AI output quietly becomes policy. | Agents draft and critique; humans approve. |
 
-An executed timebox also requires a review, and a value claim requires proof. This prevents activity, confidence, or filled-in templates from masquerading as progress.
+## A Typical StrategyNotes Journey
 
-## What You Can Do
+Imagine you need to decide whether to enter a new market.
 
-### Build a strategy case
+1. **Frame the case.** Define the decision, arena, stakeholders, constraints, and desired outcome.
+2. **Build the reality base.** Gather research, interviews, observations, and existing internal knowledge.
+3. **Test the story.** Separate evidence from assumptions, surface contradictions, and identify missing information.
+4. **Compare choices.** Evaluate where to play, how to win, required capabilities, and credible alternatives.
+5. **Make a bet.** Record what must be true, how success will be measured, and when to stop.
+6. **Design the work.** Turn the bet into bounded work with clear inputs, outputs, methods, and evidence requirements.
+7. **Commit the time.** Estimate the cost and reserve the work on the calendar.
+8. **Execute with focus.** Follow the prepared runbook and capture exceptions without losing the session.
+9. **Review the result.** Compare intent with reality, attach proof, and update the strategy.
+10. **Claim value carefully.** Show what changed, what evidence supports it, and what remains uncertain.
 
-Open a case, define its arena and outcomes, collect sources, extract evidence, map actors, and model the strategic position through Mission, Climate, Ground, Command, and Systems (MCGCS).
+The result is more than a strategy document or project plan. It is a continuous record of how evidence became a decision, how the decision became action, and what the action taught you.
 
-### Turn evidence into choices
+## Built for Trust
 
-Compare options, expose assumptions and counterevidence, create a choice cascade, and frame strategy bets with success metrics and kill criteria. Backend-owned gates block approval when required evidence or decisions are missing.
-
-### Convert choices into executable work
-
-Define work packages with objectives, inputs, outputs, tools, techniques, exception policies, and required evidence. Estimate the cost in pomodoros, then commit the work by reserving time on a calendar.
-
-### Execute with fewer decisions
-
-Execution mode presents only the active runbook, inputs, method, expected output, capture controls, and evidence attachments. New strategic questions are captured for later review instead of disrupting the work block.
-
-### Review, learn, and prove value
-
-After each timebox, record actual effort, outcomes, evidence, friction, and the next action. Daynotes provide an activity ledger, while trace views connect sources and decisions to experiments, reviews, and value claims.
-
-## The Strategy Stack
-
-Strategy artifacts are living views over linked nodes rather than isolated documents.
-
-```text
-Case Charter -> ERD -> ORD -> SLD -> Choice Cascade + Bets -> EDS -> VSD -> VRD
-                               Strategy Decision Records throughout
-```
-
-| Artifact | Purpose |
-|---|---|
-| Case Charter | Defines the case, arena, stakeholders, boundaries, and initial hypothesis. |
-| ERD | Evidence Reality Dossier: what is observed, sourced, contradicted, or uncertain. |
-| ORD | Outcome Requirements Document: what must become true and how it will be judged. |
-| SLD | Strategic Logic Document: thesis, assumptions, alternatives, tradeoffs, and failure logic. |
-| EDS | Execution Design Specification: work packages, dependencies, ownership, interfaces, and capacity. |
-| VSD | Validation Strategy Document: experiments, metrics, signals, and kill criteria. |
-| VRD | Value Realization Document: proven value, before-and-after evidence, claims, and lessons. |
-| SDR | Strategy Decision Record: what was decided, why, and on what evidence. |
-
-## One Graph, Multiple Modes
-
-StrategyNotes uses the same underlying graph across focused working modes:
-
-| Mode | Focus |
-|---|---|
-| Notes | Capture, outline, link, clone, tag, and search. |
-| Evidence | Review sources, extract evidence, assess proof, and preserve contradictions. |
-| Strategy | Build cases, requirements, logic, choices, bets, and validation plans. |
-| Planning | Package work, estimate attention cost, and reserve calendar capacity. |
-| Execution | Follow a low-decision runbook and capture exceptions and evidence. |
-| Review | Compare intent with results and update hypotheses and next actions. |
-| Value | Validate claims and trace realized value back to evidence. |
-
-## Core Principles
-
-- **Markdown is the source of truth.** Strategy-critical data remains readable and portable outside the application.
-- **SQLite is derived.** The index can be deleted and rebuilt from markdown without data loss.
-- **Relationships are durable.** Typed edges live in markdown frontmatter and can be reconstructed without the database.
-- **Evidence precedes acceptance.** Claims and evidence carry provenance, status, and proof levels.
-- **Contradictions remain visible.** Counterevidence cannot be silently discarded.
-- **Time expresses commitment.** Work requires both a pomodoro estimate and a calendar timebox.
-- **Review closes the loop.** Executed work cannot be verified without a post-block review.
-- **Humans approve.** Agents may draft, critique, and suggest; they cannot approve strategy or bypass gates.
-- **Offline comes first.** Core workflows do not require a network connection.
-
-## Architecture
-
-StrategyNotes is a desktop application built around a pure domain core and explicit ports and adapters.
-
-```text
-React / TSRX UI + Tauri desktop shell
-                 |
-         Driving application ports
-                 |
-     Rust graph, strategy, gate, and commitment core
-                 |
-          Driven service ports
-                 |
-Markdown vault | SQLite index | Calendar adapters | Event sinks
-```
-
-The main layers are:
-
-1. Markdown storage and deterministic serialization
-2. Rebuildable SQLite indexing and search
-3. Nodes, backlinks, clones, tags, and typed edges
-4. Strategy cases, evidence, claims, choices, bets, and validation
-5. Work packages, pomodoros, timeboxes, calendars, and reviews
-6. Backend-enforced gates, audit trails, and agent governance
-7. Atomic React/TSRX components composed into focused workspaces
-
-The domain core contains no filesystem, database, HTTP, async runtime, or UI dependencies. Adapters implement those concerns behind ports, so external failures cannot corrupt local strategy state.
-
-## Data Model
-
-The node is the atom. Each node has a stable ULID, markdown body, frontmatter, references, tags, and typed relationships. Evidence items, strategy bets, work packages, timeboxes, reviews, and value claims all use this same model.
-
-Nodes can appear in multiple contexts through equal placements. All placements point to the same node, so edits propagate everywhere, and cycle checks keep the placement graph valid.
-
-## Calendars and Capacity
-
-StrategyNotes treats the calendar as a commitment ledger rather than a passive due-date display.
-
-- One pomo is 25 minutes of focused work plus a 5-minute break.
-- A Deep Work Packet is six pomos, or about three hours including breaks.
-- Work packages record both estimated and actual pomos.
-- Internal timeboxes and ICS export work without a cloud account.
-- Google Calendar, Outlook, and iCloud connect through provider adapters.
-- Provider failures remain visible and never invalidate or corrupt local commitments.
-
-## Agent Governance
-
-Agent output enters a review quarantine. Agents can assemble evidence, draft artifacts, identify contradictions, critique assumptions, and propose work packages, but every accepted artifact and approval event requires a human decision.
-
-The same evidence rules apply to agent work as to human work: an agent run must expose its inputs, outputs, status, and review history.
+- **Your work remains yours.** StrategyNotes works offline and keeps your strategic record in portable markdown files.
+- **Contradictions stay visible.** The system does not smooth inconvenient evidence into a cleaner story.
+- **Claims show their strength.** Observations, inferences, hypotheses, contested claims, and validated claims remain distinct.
+- **Commitments have a real cost.** Work requires both an effort estimate and calendar time.
+- **Execution produces learning.** A work block is not verified until it has been reviewed.
+- **Humans retain authority.** Agents can help with the work but cannot approve strategy.
 
 ## Getting Started
 
 <!-- Placeholder: replace release links and platform details before publication. -->
 
-### Install the desktop app
-
-Download the appropriate StrategyNotes release for your platform:
+Download StrategyNotes for your platform:
 
 - macOS: `[release link]`
 - Windows: `[release link]`
 - Linux: `[release link]`
 
-### Create or open a vault
+Then create a new strategy case or open an existing StrategyNotes workspace.
 
-1. Launch StrategyNotes.
-2. Create a new vault or select an existing folder of StrategyNotes markdown files.
-3. Open a strategy case or begin in Notes mode.
-4. Configure calendar export or a calendar provider under Settings.
+<!-- Placeholder: add a link to the user guide and a five-minute first-case tutorial. -->
 
-### Build from source
+## Learn More
 
-Prerequisites:
-
-- Rust stable
-- Node.js `[supported version]`
-- pnpm 10.26.2 or newer compatible release
-- Tauri system dependencies for your operating system
-
-```bash
-pnpm install
-cargo build --workspace
-pnpm -C ui build
-```
-
-<!-- Placeholder: add the final Tauri development and production build commands. -->
-
-## Development
-
-Run the available verification commands:
-
-```bash
-cargo check --workspace
-cargo test --workspace
-pnpm -C ui typecheck
-pnpm -C ui test
-pnpm -C ui build
-```
-
-Run the web UI during frontend development:
-
-```bash
-pnpm -C ui dev
-```
-
-All changes follow test-driven, evidence-gated slices. Each slice links to product requirements, design rules, invariants, and test categories, then records its verification evidence in `.agents/evidence.md`.
-
-## Repository Guide
-
-| Path | Purpose |
-|---|---|
-| `core/` | Pure Rust domain types, graph behavior, gates, and application contracts. |
-| `adapters/` | Markdown, SQLite, calendar, and event-sink implementations. |
-| `ui/` | React/TypeScript interface and atomic component system. |
-| `SPEC.md` | Authoritative product and software specification. |
-| `PLAN.md` | Implementation phases, slices, evidence gates, and definition of done. |
-| `AGENTS.md` | Required working rules for human and AI contributors. |
-| `Strategy_Framework_tread.md` | Original strategy discussion and design rationale; context, not specification. |
-
-Read `AGENTS.md`, `SPEC.md`, and `PLAN.md` before changing the system. When documents conflict, invariants and durable-storage rules take precedence.
-
-## Documentation
-
-- [Product and software specification](SPEC.md)
+- [Product specification](SPEC.md)
 - [Implementation plan](PLAN.md)
-- [Contributor and agent instructions](AGENTS.md)
-- [Changelog](CHANGELOG.md)
+- [Project changelog](CHANGELOG.md)
 
-<!-- Placeholder: user guide, architecture decisions, contribution guide, security policy, and support links. -->
-
-## Release and Support
-
-<!-- Placeholder: release channel, version, platform matrix, stability guarantees, and support contact. -->
-
-StrategyNotes follows evidence-based release gates. A release is accepted only when storage portability, index rebuild, graph integrity, approval gates, timebox review, agent quarantine, traceability, and offline operation pass their conformance checks.
-
-## License
-
-<!-- Placeholder: selected license and link to LICENSE. -->
+<!-- Placeholder: user guide, examples, support contact, and license. -->

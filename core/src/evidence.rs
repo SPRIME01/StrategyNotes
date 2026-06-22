@@ -44,6 +44,7 @@ pub enum EvidenceKind {
 /// A source document imported into the vault (article, transcript, note, etc.).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Source {
+    #[serde(skip)]
     pub id: NodeId,
     pub title: String,
     #[serde(default)]
@@ -53,6 +54,7 @@ pub struct Source {
 /// A located chunk within a source - the unit evidence is extracted from.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SourceChunk {
+    #[serde(skip)]
     pub id: NodeId,
     pub source: NodeId,
     pub locator: String, // page, timestamp, offset - source-format specific
@@ -63,6 +65,7 @@ pub struct SourceChunk {
 /// `Accepted` without a source link or explicit manual basis + reviewer.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EvidenceItem {
+    #[serde(skip)]
     pub id: NodeId,
     pub kind: EvidenceKind,
     pub status: EvidenceStatus,

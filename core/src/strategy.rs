@@ -47,28 +47,12 @@ impl StrategyCase {
             arena: None,
         }
     }
-
-    /// Serialize to a storage [`Node`] (strategy_case typed note).
-    pub fn to_node(&self) -> Result<crate::node::Node, crate::Error> {
-        Ok(crate::node::Node {
-            id: self.id,
-            ty: crate::node::NodeType::StrategyCase,
-            frontmatter: crate::format::frontmatter_from(self)?,
-            body: String::new(),
-        })
-    }
-
-    /// Parse a storage [`Node`] back into a typed view.
-    pub fn from_node(node: &crate::node::Node) -> Result<Self, crate::Error> {
-        let mut case: StrategyCase = crate::format::frontmatter_to(&node.frontmatter)?;
-        case.id = node.id;
-        Ok(case)
-    }
 }
 
 /// An outcome requirement (ORD). Acceptance criteria required for success.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OutcomeRequirement {
+    #[serde(skip)]
     pub id: NodeId,
     pub case: NodeId,
     pub statement: String,
@@ -79,6 +63,7 @@ pub struct OutcomeRequirement {
 /// A strategic claim (SLD thesis, sub-thesis, or load-bearing assertion).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StrategicClaim {
+    #[serde(skip)]
     pub id: NodeId,
     pub statement: String,
     pub proof_level: ProofLevel,
@@ -91,6 +76,7 @@ pub struct StrategicClaim {
 /// An assumption that, if false, breaks the strategy (load-bearing).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Assumption {
+    #[serde(skip)]
     pub id: NodeId,
     pub statement: String,
     #[serde(default)]
@@ -121,6 +107,7 @@ pub enum ChoiceLevel {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChoiceCascade {
+    #[serde(skip)]
     pub id: NodeId,
     pub case: NodeId,
     pub level: ChoiceLevel,
@@ -131,6 +118,7 @@ pub struct ChoiceCascade {
 /// counterevidence review, success metric, kill criteria, owner.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StrategyBet {
+    #[serde(skip)]
     pub id: NodeId,
     pub case: NodeId,
     pub thesis: String,

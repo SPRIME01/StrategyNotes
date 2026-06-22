@@ -218,3 +218,26 @@ fn map_to_value(fm: &Frontmatter) -> serde_yaml::Value {
     }
     serde_yaml::Value::Mapping(mapping)
 }
+
+/// Build a storage [`Node`] from a typed view. The view's `id` field must be
+/// `#[serde(skip)]` so it isn't duplicated in the frontmatter payload.
+pub fn typed_to_node<T: Serialize>(
+    val: &T,
+    id: NodeId,
+    ty: crate::node::NodeType,
+) -> Result<crate::node::Node, Error> {
+    Ok(crate::node::Node {
+        id,
+        ty,
+        frontmatter: frontmatter_from(val)?,
+        body: String::new(),
+    })
+}
+
+/// Parse the frontmatter payload of a [`Node`] back into a typed view. The
+/// caller sets `id` from `node.id` (it is `#[serde(skip)]`).
+pub fn typed_from_node<T: serde::de::DeserializeOwned>(
+    node: &crate::node::Node,
+) -> Result<T, Error> {
+    frontmatter_to(&node.frontmatter)
+}

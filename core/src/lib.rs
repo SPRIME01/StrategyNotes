@@ -22,13 +22,16 @@ pub mod gate;
 pub mod gates;
 pub mod governance;
 pub mod graph;
+pub mod ics;
 pub mod identity;
 pub mod naming;
 pub mod node;
 pub mod ports;
+pub mod services;
 pub mod strategy;
 pub mod time;
 pub mod trace;
+pub mod views;
 
 pub use error::Error;
 pub use evidence::{

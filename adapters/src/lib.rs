@@ -5,7 +5,9 @@
 pub mod daynote_sink;
 pub mod markdown_vault;
 pub mod sqlite_index;
+pub mod trivial;
 
 pub use daynote_sink::DaynoteEventSink;
 pub use markdown_vault::MarkdownVault;
 pub use sqlite_index::SQLiteIndex;
+pub use trivial::{SystemClock, UlidMinter};

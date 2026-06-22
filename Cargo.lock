@@ -474,6 +474,7 @@ dependencies = [
  "serde_yaml",
  "strategynotes-core",
  "tempfile",
+ "ulid",
 ]
 
 [[package]]

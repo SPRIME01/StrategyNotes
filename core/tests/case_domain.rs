@@ -4,6 +4,7 @@
 
 use strategynotes_core::format::{from_markdown, to_markdown};
 use strategynotes_core::strategy::{CasePhase, StrategyCase};
+use strategynotes_core::views::TypedView;
 use strategynotes_core::NodeId;
 
 #[test]
