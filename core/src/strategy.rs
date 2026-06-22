@@ -24,9 +24,9 @@ pub enum CasePhase {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StrategyCase {
-    /// `#[serde(skip)]`: id lives in `Node.id`, not in the frontmatter payload.
-    /// Set explicitly by [`StrategyCase::to_node`] / [`StrategyCase::from_node`].
-    #[serde(skip)]
+    /// `#[serde(default)]`: id round-trips through JSON API responses; the
+    /// frontmatter bridge sets it from `Node.id` via `from_node`.
+    #[serde(default)]
     pub id: NodeId,
     pub title: String,
     pub phase: CasePhase,
@@ -52,7 +52,7 @@ impl StrategyCase {
 /// An outcome requirement (ORD). Acceptance criteria required for success.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OutcomeRequirement {
-    #[serde(skip)]
+    #[serde(default)]
     pub id: NodeId,
     pub case: NodeId,
     pub statement: String,
@@ -63,7 +63,7 @@ pub struct OutcomeRequirement {
 /// A strategic claim (SLD thesis, sub-thesis, or load-bearing assertion).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StrategicClaim {
-    #[serde(skip)]
+    #[serde(default)]
     pub id: NodeId,
     pub statement: String,
     pub proof_level: ProofLevel,
@@ -76,7 +76,7 @@ pub struct StrategicClaim {
 /// An assumption that, if false, breaks the strategy (load-bearing).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Assumption {
-    #[serde(skip)]
+    #[serde(default)]
     pub id: NodeId,
     pub statement: String,
     #[serde(default)]
@@ -107,7 +107,7 @@ pub enum ChoiceLevel {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChoiceCascade {
-    #[serde(skip)]
+    #[serde(default)]
     pub id: NodeId,
     pub case: NodeId,
     pub level: ChoiceLevel,
@@ -118,7 +118,7 @@ pub struct ChoiceCascade {
 /// counterevidence review, success metric, kill criteria, owner.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StrategyBet {
-    #[serde(skip)]
+    #[serde(default)]
     pub id: NodeId,
     pub case: NodeId,
     pub thesis: String,

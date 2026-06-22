@@ -1,12 +1,17 @@
-import { defineConfig } from 'vitest/config'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from "vitest/config";
+import react from "@vitejs/plugin-react";
 
-// ponytail: single config for vite + vitest. vitest/config re-exports vite's
-// defineConfig with the `test` field typed. Tauri shell wiring (Phase 0
-// sub-slice S-PHASE0-002) will extend this.
+// Vite + Vitest config. The dev proxy forwards /api -> the Rust HTTP server
+// (run `cargo run -p strategynotes-server -- serve`). Production builds can be
+// served by Tauri (Phase 12 sub-slice) or any static host + the API server.
 export default defineConfig({
   plugins: [react()],
-  test: {
-    environment: 'jsdom',
+  server: {
+    proxy: {
+      "/api": "http://127.0.0.1:8787",
+    },
   },
-})
+  test: {
+    environment: "jsdom",
+  },
+});

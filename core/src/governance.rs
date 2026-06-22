@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// drift rule). Halting signal for autonomous agents.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OpenQuestion {
-    #[serde(skip)]
+    #[serde(default)]
     pub id: NodeId,
     pub title: String,
     pub statement: String,
@@ -31,7 +31,7 @@ pub enum QuestionStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Risk {
-    #[serde(skip)]
+    #[serde(default)]
     pub id: NodeId,
     pub description: String,
     #[serde(default)]
@@ -52,7 +52,7 @@ pub enum AgentRunStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentRun {
-    #[serde(skip)]
+    #[serde(default)]
     pub id: NodeId,
     pub agent: String,
     pub status: AgentRunStatus,

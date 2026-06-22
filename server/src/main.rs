@@ -1,10 +1,7 @@
-//! StrategyNotes driving layer - CLI entry.
+//! StrategyNotes driving layer - CLI + HTTP entry.
 //!
-//! Runs a scripted end-to-end spine against a real vault in <data-dir>,
-//! printing human-readable output at each step. Proves the backend is a
-//! runnable program, not just a test suite.
-//!
-//! Usage: strategynotes <data-dir>    (default: ./strategynotes-data)
+//! - `strategynotes <data-dir>`        runs the spine as a CLI demo.
+//! - `strategynotes serve [data-dir]`  starts the HTTP API (Phase 12 bridge).
 
 use std::path::PathBuf;
 
@@ -13,18 +10,39 @@ use strategynotes_adapters::{DaynoteEventSink, MarkdownVault, SQLiteIndex, Syste
 use strategynotes_core::evidence::{EvidenceKind, ProofLevel};
 use strategynotes_core::execution::{Completion, PomoEstimate};
 use strategynotes_core::ics::export_timebox_to_ics;
-use strategynotes_core::ports::{DerivedIndex, NodeVault};
+use strategynotes_core::ports::DerivedIndex;
 use strategynotes_core::services::App;
 use strategynotes_core::trace::reachable_via_spine;
 use strategynotes_core::{AttentionMode, EdgeType, GateResult, PomoPattern};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let data_dir: PathBuf = std::env::args()
-        .nth(1)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("strategynotes-data"));
+mod http;
 
-    println!("=== StrategyNotes - end-to-end spine ===");
+fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let result = if args.first().map(String::as_str) == Some("serve") {
+        let data_dir = args
+            .get(1)
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("strategynotes-data"));
+        let port = args.get(2).and_then(|s| s.parse::<u16>().ok()).unwrap_or(8787);
+        // tokio runtime for the HTTP server.
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(http::serve(&data_dir, port))
+    } else {
+        let data_dir = args
+            .first()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("strategynotes-data"));
+        run_spine(&data_dir)
+    };
+    if let Err(e) = result {
+        eprintln!("error: {e}");
+        std::process::exit(1);
+    }
+}
+
+fn run_spine(data_dir: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
+    println!("\n=== StrategyNotes - end-to-end spine ===");
     println!("data dir: {}", data_dir.display());
 
     let vault = MarkdownVault::open(data_dir.join("vault"))?;

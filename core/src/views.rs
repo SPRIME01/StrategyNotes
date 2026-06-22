@@ -2,9 +2,9 @@
 //! is stored as a node implements [`TypedView`] here. Co-located for review;
 //! the structs themselves are defined in their domain modules.
 //!
-//! Pattern: `id` is `#[serde(skip)]` on every struct (it lives in `Node.id`),
-//! set explicitly by `from_node`. Every other field round-trips through the
-//! frontmatter map via [`format::typed_to_node`] / [`format::typed_from_node`].
+//! Pattern: `id` is `#[serde(default)]` on every struct so it appears in JSON
+//! API responses; `from_node` sets it from `Node.id` (to_markdown injects id
+//! into the on-disk frontmatter separately, so storage round-trips either way).
 
 use crate::evidence::{EvidenceItem, Source, SourceChunk};
 use crate::execution::{DecisionRecord, Timebox, TimeboxReview, ValueClaim, WorkPackage};

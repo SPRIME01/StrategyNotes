@@ -24,7 +24,7 @@ pub enum WorkStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkPackage {
-    #[serde(skip)]
+    #[serde(default)]
     pub id: NodeId,
     pub case: NodeId,
     pub objective: String,
@@ -95,7 +95,7 @@ pub enum TimeboxStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Timebox {
-    #[serde(skip)]
+    #[serde(default)]
     pub id: NodeId,
     pub work_package: NodeId,
     pub status: TimeboxStatus,
@@ -111,7 +111,7 @@ pub struct Timebox {
 /// Post-block review. INV-REVIEW: required before Timebox -> Verified.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimeboxReview {
-    #[serde(skip)]
+    #[serde(default)]
     pub id: NodeId,
     pub timebox: NodeId,
     pub executed: bool,
@@ -145,7 +145,7 @@ pub enum Completion {
 /// Value claim. INV-VALUE: no acceptance without proof level + evidence links.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ValueClaim {
-    #[serde(skip)]
+    #[serde(default)]
     pub id: NodeId,
     pub case: NodeId,
     pub statement: String,
@@ -172,7 +172,7 @@ pub enum ValueStatus {
 /// Created when a bet is approved or a major decision is made.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DecisionRecord {
-    #[serde(skip)]
+    #[serde(default)]
     pub id: NodeId,
     pub case: NodeId,
     pub decision: String,
