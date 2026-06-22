@@ -81,4 +81,13 @@ export const api = {
     }),
   validateValue: (id: string) => call<GateResult>("POST", `/api/value-claims/${id}/validate`),
   trace: (id: string) => call<{ reachable: string[] }>("GET", `/api/trace/${id}`),
+  search: (q: string) => call<{ id: string; ty: string; excerpt: string }[]>("GET", `/api/search?q=${encodeURIComponent(q)}`),
+  getNode: (id: string) => call<WithId & { body?: string }>("GET", `/api/node/${id}`),
+  nodesByType: (ty: string) => call<string[]>("GET", `/api/nodes/${ty}`),
+  createAgentRun: (agent: string, summary: string) =>
+    call<WithId>("POST", "/api/agent-runs", { agent, summary }),
+  acceptAgentRun: (id: string, reviewer: string) =>
+    call<GateResult>("POST", `/api/agent-runs/${id}/accept`, { reviewer }),
+  rejectAgentRun: (id: string) => call<WithId>("POST", `/api/agent-runs/${id}/reject`),
+  daynote: (date: string) => call<{ content: string }>("GET", `/api/daynote/${date}`),
 };

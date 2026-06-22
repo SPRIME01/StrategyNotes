@@ -57,6 +57,8 @@ pub async fn serve(data_dir: &Path, port: u16) -> Result<(), Box<dyn std::error:
 
     let app = Router::new()
         .route("/api/health", get(health))
+        .route("/api/node/:id", get(get_node))
+        .route("/api/nodes/:ty", get(list_nodes_by_type))
         .route("/api/cases", post(create_case).get(list_cases))
         .route("/api/sources", post(add_source))
         .route("/api/source-chunks", post(add_source_chunk))
@@ -91,6 +93,30 @@ pub async fn serve(data_dir: &Path, port: u16) -> Result<(), Box<dyn std::error:
 
 async fn health() -> &'static str {
     "ok"
+}
+
+/// GET /api/node/:id - return one node's raw frontmatter + body (for UI rendering).
+async fn get_node(
+    State(st): State<Arc<ServerState>>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let nid = NodeId::parse(&id)?;
+    let node = st
+        .vault
+        .get(&nid)?
+        .ok_or(AppError(StatusCode::NOT_FOUND, format!("node {id} not found")))?;
+    Ok(Json(serde_json::to_value(&node)?))
+}
+
+/// GET /api/nodes/:ty - list node ids of a given type (snake_case).
+async fn list_nodes_by_type(
+    State(st): State<Arc<ServerState>>,
+    AxumPath(ty): AxumPath<String>,
+) -> Result<Json<Vec<String>>, AppError> {
+    st.index.rebuild(&st.vault)?;
+    let nt: NodeType = strategynotes_core::naming::from_snake_case(&ty)?;
+    let ids = st.index.nodes_by_type(nt)?;
+    Ok(Json(ids.into_iter().map(|i| i.to_lexical()).collect()))
 }
 
 #[derive(Deserialize)]
