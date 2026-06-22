@@ -19,6 +19,7 @@ pub mod evidence_rules;
 pub mod execution;
 pub mod format;
 pub mod gate;
+pub mod gates;
 pub mod governance;
 pub mod graph;
 pub mod identity;

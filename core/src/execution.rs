@@ -118,6 +118,10 @@ pub struct TimeboxReview {
     pub completed_expected_output: Completion,
     #[serde(default)]
     pub evidence_links: Vec<NodeId>,
+    /// Explicit reason when no evidence was produced (SPEC sec 9: "evidence
+    /// link OR explicit no-evidence reason"). Required-with-evidence OR this.
+    #[serde(default)]
+    pub no_evidence_reason: Option<String>,
     #[serde(default)]
     pub friction_notes: Option<String>,
     #[serde(default)]

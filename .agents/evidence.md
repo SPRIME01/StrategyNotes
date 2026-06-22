@@ -410,3 +410,56 @@ Remaining gaps:
 - Actor/Ranking model - deferred.
 
 Status: Accepted
+
+---
+
+## EV-007 — Phase 7 gate engine (the teeth)
+
+Date: 2026-06-21
+Slice: S-GATE-001
+Spec IDs: PRD-017, PRD-018, PRD-022, PRD-023, SDS-GATE, INV-EVID, INV-CLAIM,
+         INV-BET, INV-WORK, INV-REVIEW, INV-VALUE, TST-GATE
+
+Commands run:
+```bash
+cargo test --workspace
+```
+
+Result:
+```text
+strategynotes-core:
+  gates.rs .............. 16 passed
+    INV-EVID  : approve-with-source, block-without-source-or-manual
+    INV-CLAIM : approve-supported, block-rejected, block-unsupported
+    INV-BET   : approve-complete, block-incomplete-lists-every-missing-field,
+                block-on-empty-strings-not-just-none (UI theater guard)
+    INV-WORK  : approve-complete, block-missing-inputs-and-outputs
+    INV-REVIEW: approve-with-evidence, approve-with-explicit-no-evidence-reason,
+                block-without-evidence-or-reason, block-unexecuted
+    INV-VALUE : block-without-evidence-or-outcome, approve-with-evidence+outcome
+TOTAL workspace: 70 passed, 0 failed
+```
+
+Files added/changed:
+- core/src/gates.rs - 6 gate evaluators returning GateResult:
+    can_accept_evidence, can_accept_claim, can_approve_bet,
+    can_commit_work_package, can_verify_timebox, can_claim_value.
+  Each is a pure function over its subject; missing each required field produces
+  a typed failed_gate string. Empty-string fields trip the gate just like None
+  (guards against UI theater).
+- core/src/execution.rs - added `no_evidence_reason: Option<String>` to
+  TimeboxReview (SPEC sec 9: "evidence link OR explicit no-evidence reason").
+- core/tests/gates.rs - 16 gate tests (positive + negative per gate).
+
+Fidelity notes:
+- Backend-owns-gates is now real: every gate returns Approved or Blocked{failed_gates}.
+  The UI cannot approve anything; it calls these (via services) and renders.
+- Empty-string-as-filled theater is blocked: `owner: Some("   ")` trips the bet
+  gate just like `owner: None`.
+- INV-REVIEW's "evidence OR explicit no-evidence reason" is a real disjunction,
+  not a rubber stamp - both branches tested.
+- Each gate is a pure function over domain types - no I/O, no index needed for
+  the field-presence checks. (Cross-node context checks, e.g. "does the linked
+  choice actually exist?", layer in via the index when services are wired.)
+
+Status: Accepted
