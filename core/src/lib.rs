@@ -14,6 +14,7 @@
 
 pub mod agent_rules;
 pub mod body;
+pub mod calendar;
 pub mod capacity;
 pub mod case_lifecycle;
 pub mod error;

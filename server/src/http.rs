@@ -19,7 +19,9 @@ use tower_http::cors::CorsLayer;
 use strategynotes_adapters::{DaynoteEventSink, MarkdownVault, SQLiteIndex, SystemClock, UlidMinter};
 use strategynotes_core::evidence::{EvidenceKind, ProofLevel};
 use strategynotes_core::execution::{Completion, PomoEstimate};
+use strategynotes_core::node::NodeType;
 use strategynotes_core::ports::{DerivedIndex, NodeVault};
+use strategynotes_core::naming::from_snake_case;
 use strategynotes_core::services::App;
 use strategynotes_core::trace::reachable_via_spine;
 use strategynotes_core::views::TypedView;
@@ -114,7 +116,7 @@ async fn list_nodes_by_type(
     AxumPath(ty): AxumPath<String>,
 ) -> Result<Json<Vec<String>>, AppError> {
     st.index.rebuild(&st.vault)?;
-    let nt: NodeType = strategynotes_core::naming::from_snake_case(&ty)?;
+    let nt: NodeType = from_snake_case(&ty)?;
     let ids = st.index.nodes_by_type(nt)?;
     Ok(Json(ids.into_iter().map(|i| i.to_lexical()).collect()))
 }
