@@ -258,3 +258,52 @@ Remaining gaps:
   index-loss test; full corruption detection deferred).
 
 Status: Accepted
+
+---
+
+## EV-004 — Phase 4 daynote/event sink (INV-DAY capture)
+
+Date: 2026-06-21
+Slice: S-DAY-001
+Spec IDs: PRD-007, PRD-024, SDS-DAY, INV-DAY, TST-DAY
+
+Commands run:
+```bash
+cargo test --workspace
+```
+
+Result:
+```text
+strategynotes-adapters:
+  daynote_sink ......... 4 passed
+    - records_events_into_a_per_day_file
+    - events_on_different_dates_land_in_different_files
+    - reading_a_missing_day_returns_empty_not_error
+    - agent_and_external_sources_are_distinguished  (OQ-005 proven)
+TOTAL workspace: 31 passed, 0 failed
+```
+
+Files added:
+- adapters/src/daynote_sink.rs - DaynoteEventSink: EventSink impl that appends
+  each ActivityEvent as a line in <root>/<YYYY-MM-DD>.md. Per-day files, lazy
+  creation, best-effort append (INV-DAY capture never fails the calling op).
+  Event source (user/agent/external-file/system) captured per OQ-005 Option A.
+
+Fidelity notes:
+- INV-DAY enforced by the port boundary: only the core emits ActivityEvents
+  through EventSink; the UI cannot fabricate daynote entries directly.
+- OQ-005 (recommended Option A) made executable: external-file edits surface
+  with explicit `(external-file)` source metadata in the daynote.
+- Daynotes are NOT nodes - they are derived activity records living in a sidecar
+  dir, separate from the durable node vault.
+
+Remaining gaps:
+- Phase 4 clone/multi-parent placement + cycle detection (INV-CLONE) NOT done.
+  Blocked on OQ-006 (node grouping model): the SPEC does not specify how clones
+  are encoded (parent edge type? outline structure? frontmatter key?). Inventing
+  a model here would violate PLAN sec 1 drift rule. OQ-006 escalated to Sam.
+- Daynote rendering into the full ledger shape (PRD-024: committed/executed/
+  missed timeboxes, evidence produced, decisions made) waits on Phases 8-11
+  (work packages, timeboxes) which produce those events.
+
+Status: Accepted

@@ -7,6 +7,20 @@ Resolve a question by editing its Status line and adding a Resolved subsection.
 
 ## Active open questions (from PLAN sec 11)
 
+### OQ-006 — Node grouping / clone model (BLOCKING Phase 4 INV-CLONE)
+Status: Escalated (blocking S-CLONE-001)
+Affected: PRD-006, SDS-GRAPH, SDS-NODE, INV-CLONE
+Owner: Sam / Architecture
+Question: SPEC sec 4.3 says clones are "equal placements; clone edits propagate;
+  clone-induced cycles rejected" but does not specify HOW a clone is encoded.
+Options:
+  A. A `placement`/`parent` typed edge (clones are typed edges of a new edge type).
+  B. Outline structure in the parent node's body (like Roam/Logseq block refs).
+  C. A frontmatter `parents: [id, id]` key on the cloned node.
+  D. A separate `placement` node type linking parent -> child.
+Why blocking: implementing clone + cycle detection (INV-CLONE) requires picking
+one. Inventing a model here would violate PLAN sec 1 drift rule. Need Sam's call.
+
 ### OQ-001 — Markdown schema for typed strategy edges
 Status: Pending (recommend Option A: frontmatter)
 Affected: PRD-005, SDS-GRAPH, INV-EDGE, INV-PORT
