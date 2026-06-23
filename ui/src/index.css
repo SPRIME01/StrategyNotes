@@ -21,6 +21,7 @@
   --color-surface-1: oklch(17.5% 0.007 264);
   --color-surface-2: oklch(24% 0.009 264);
   --color-surface-3: oklch(28% 0.011 264);
+  --color-surface-4: oklch(32% 0.013 264);
 
   /* muted / secondary */
   --color-muted: oklch(24% 0.009 264);
@@ -31,9 +32,12 @@
   /* one accent — calm instrument cyan */
   --color-primary: oklch(76% 0.11 219);
   --color-primary-foreground: oklch(14.5% 0.006 264);
+  --color-accent-dim: oklch(76% 0.11 219 / 0.13);
+  --color-accent-ink: oklch(82% 0.12 219);
 
   /* structure — hairline borders */
   --color-border: oklch(26% 0.009 264);
+  --color-border-strong: oklch(34% 0.011 264);
   --color-input: oklch(26% 0.009 264);
   --color-ring: oklch(76% 0.11 219);
 
@@ -60,6 +64,9 @@
 
   /* radii */
   --radius: 7px;
+  --radius-sm: 4px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
 }
 
 * {
@@ -83,4 +90,21 @@ body {
 /* numerics use tabular figures */
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/* ─── Typography utilities (TASK-009) ─── */
+.kicker {
+  font: 600 11px/1.35 var(--font-sans);
+  letter-spacing: 0.01em;
+  color: var(--color-muted-ink);
+}
+.kicker-uc {
+  font: 600 10.5px/1 var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-muted-ink);
+}
+.h1 {
+  font: 500 20px/1.25 var(--font-sans);
+  letter-spacing: -0.01em;
 }

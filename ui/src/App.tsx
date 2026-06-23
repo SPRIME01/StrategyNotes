@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { cn } from "./lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
@@ -93,15 +94,19 @@ export function App() {
                 {g.group}
               </div>
               {g.items.map((it) => (
-                <button
+                <a
                   key={it.id}
-                  onClick={() => setView(it.id)}
-                  className={`w-full rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
-                    view === it.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"
-                  }`}
+                  href={`#${it.id}`}
+                  onClick={(e) => { e.preventDefault(); setView(it.id); }}
+                  className={cn(
+                    "relative flex items-center rounded-md py-[7px] pr-[10px] pl-4 text-sm transition-colors",
+                    view === it.id
+                      ? "bg-surface-3 text-foreground before:absolute before:left-1 before:top-2 before:bottom-2 before:w-0.5 before:rounded-full before:bg-primary"
+                      : "text-muted-foreground hover:bg-secondary",
+                  )}
                 >
                   {it.label}
-                </button>
+                </a>
               ))}
             </div>
           ))}

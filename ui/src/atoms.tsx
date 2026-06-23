@@ -11,12 +11,20 @@ import type { GateResult } from "./api";
 export function GateStatusBadge({ gate }: { gate: GateResult | null }) {
   if (!gate) return null;
   if (gate.status === "approved")
-    return <Badge variant="gate-ok">✓ approved</Badge>;
+    return (
+      <Badge variant="gate-ok">
+        <span className="w-[7px] h-[7px] rounded-full bg-current" style={{ boxShadow: "0 0 0 2px color-mix(in oklch, currentColor 22%, transparent)" }} />
+        approved
+      </Badge>
+    );
   return (
     <div className="flex flex-wrap items-center gap-1">
-      <Badge variant="gate-bad">✕ blocked</Badge>
+      <Badge variant="gate-bad">
+        <span className="w-[7px] h-[7px] rounded-full bg-current" style={{ boxShadow: "0 0 0 2px color-mix(in oklch, currentColor 22%, transparent)" }} />
+        blocked
+      </Badge>
       {gate.failed_gates?.map((f) => (
-        <Badge key={f} variant="gate-bad" className="opacity-70 text-[10px]">
+        <Badge key={f} variant="gate-bad" className="opacity-70">
           {f}
         </Badge>
       ))}
@@ -41,7 +49,7 @@ export function ProofLevelBadge({ level }: { level: string }) {
   const v = PROOF_COLOR[level?.toLowerCase()] ?? "outline";
   return (
     <Badge variant={v} className="capitalize">
-      <span className="inline-block w-1.5 h-1.5 rounded-full bg-current opacity-60" />
+      <span className="inline-block w-[6px] h-[6px] rounded-full bg-current opacity-60" />
       {level}
     </Badge>
   );
@@ -84,10 +92,10 @@ export function NodeTypeBadge({ type }: { type: string }) {
 
 export function EvidenceStateBadge({ state }: { state: string }) {
   const s = state?.toLowerCase();
-  if (s === "accepted") return <Badge variant="gate-ok">{state}</Badge>;
-  if (s === "rejected" || s === "superseded") return <Badge variant="gate-bad">{state}</Badge>;
-  if (s === "drafted") return <Badge variant="gate-warn" className="border-dashed">{state}</Badge>;
-  return <Badge variant="gate-info">{state}</Badge>;
+  if (s === "accepted") return <Badge variant="gate-ok" className="rounded-full">{state}</Badge>;
+  if (s === "rejected" || s === "superseded") return <Badge variant="gate-bad" className="rounded-full">{state}</Badge>;
+  if (s === "drafted") return <Badge variant="gate-warn" className="rounded-full border-dashed border-border-strong">{state}</Badge>;
+  return <Badge variant="gate-info" className="rounded-full">{state}</Badge>;
 }
 
 // ---- PomoCostBadge ----
@@ -107,6 +115,8 @@ export function MaturityChip({ maturity }: { maturity: string }) {
   if (m === "accepted" || m === "validated" || m === "claimed")
     return <Badge variant="gate-ok" className="uppercase">{maturity}</Badge>;
   if (m === "superseded") return <Badge variant="gate-bad" className="uppercase">{maturity}</Badge>;
+  if (m === "drafted") return <Badge variant="gate-warn" className="uppercase border-dashed border-border-strong">{maturity}</Badge>;
+  if (m === "reviewed") return <Badge variant="gate-warn" className="uppercase border-border-strong bg-surface-2">{maturity}</Badge>;
   return <Badge variant="gate-warn" className="uppercase">{maturity}</Badge>;
 }
 
