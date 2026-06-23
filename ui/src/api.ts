@@ -99,4 +99,10 @@ export const api = {
     call<{ deleted: string }>("DELETE", `/api/notes/${id}`),
   getBacklinks: (id: string) =>
     call<string[]>("GET", `/api/notes/${id}/backlinks`),
+  cloneNote: (id: string, parentId: string) =>
+    call<{ cloned: boolean }>("POST", `/api/notes/${id}/clone`, { parent_id: parentId }),
+  getPlacements: (id: string) =>
+    call<string[]>("GET", `/api/notes/${id}/placements`),
+  promoteNote: (id: string, targetType: string) =>
+    call<WithId>("POST", `/api/notes/${id}/promote`, { target_type: targetType }),
 };

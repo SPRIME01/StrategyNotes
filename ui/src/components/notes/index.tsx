@@ -221,3 +221,42 @@ export function SortControl({ value, onChange }: { value: SortMode; onChange: (s
     </select>
   );
 }
+
+// ─── CloneIndicator (TASK-N15) ───
+
+export function CloneIndicator({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-[10px] font-mono text-muted-foreground"
+      title={`Cloned to ${count} location${count > 1 ? "s" : ""}`}
+    >
+      ◈ {count}
+    </span>
+  );
+}
+
+// ─── PromoteMenu (TASK-N28) ───
+
+const PROMOTE_OPTIONS = [
+  { type: "evidence_item", label: "Evidence Item" },
+  { type: "strategic_claim", label: "Strategic Claim" },
+  { type: "strategy_bet", label: "Strategy Bet" },
+  { type: "outcome_requirement", label: "Outcome Requirement" },
+  { type: "value_claim", label: "Value Claim" },
+];
+
+export function PromoteMenu({ onPromote }: { onPromote: (type: string) => void }) {
+  return (
+    <select
+      defaultValue=""
+      onChange={(e) => { if (e.target.value) { onPromote(e.target.value); e.target.value = ""; } }}
+      className="rounded-md border bg-surface-1 px-2 py-1 text-xs text-muted-foreground outline-none"
+    >
+      <option value="" disabled>Promote to…</option>
+      {PROMOTE_OPTIONS.map((o) => (
+        <option key={o.type} value={o.type}>{o.label}</option>
+      ))}
+    </select>
+  );
+}

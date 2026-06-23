@@ -10,7 +10,8 @@ import {
 import { api, type GateResult } from "./api";
 import {
   TagsBar, SortControl, AutocompleteDropdown, detectCompletion,
-  collectTags, type CompletionState, type SortMode,
+  collectTags, CloneIndicator, PromoteMenu,
+  type CompletionState, type SortMode,
 } from "./components/notes";
 
 // ─── types matching api.ts shapes ───
@@ -69,10 +70,10 @@ const CAPACITY = { committed: 18, available: 24 };
 
 // ─── shell ───
 
-type View = "notes" | "cockpit" | "evidence" | "trace" | "bets" | "work" | "runbook" | "daynote" | "vrd" | "agent";
+type View = "notes" | "journal" | "cockpit" | "evidence" | "trace" | "bets" | "work" | "runbook" | "daynote" | "vrd" | "agent";
 
 const NAV: { group: string; items: { id: View; label: string }[] }[] = [
-  { group: "Notes", items: [{ id: "notes", label: "All Notes" }] },
+  { group: "Notes", items: [{ id: "notes", label: "All Notes" }, { id: "journal", label: "Journal" }] },
   { group: "Reality", items: [{ id: "cockpit", label: "Case Cockpit" }, { id: "evidence", label: "Evidence Inbox" }] },
   { group: "Strategy", items: [{ id: "bets", label: "Bet Board" }, { id: "trace", label: "Trace Explorer" }] },
   { group: "Execution", items: [{ id: "work", label: "Work / Timebox" }, { id: "runbook", label: "Execution Runbook" }] },
@@ -133,6 +134,7 @@ export function App() {
         <main className="flex-1 overflow-y-auto p-6">
           <div className="mx-auto max-w-[1340px]">
             {view === "notes" && <NotesView />}
+            {view === "journal" && <JournalView />}
             {view === "cockpit" && <CaseCockpit />}
             {view === "evidence" && <EvidenceInbox />}
             {view === "bets" && <BetBoard />}
@@ -552,6 +554,7 @@ function NotesView() {
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>("recent");
   const [completion, setCompletion] = useState<CompletionState>({ type: null, startPos: 0, partial: "" });
+  const [placements, setPlacements] = useState(0);
 
   const loadNotes = async () => {
     try {
@@ -571,6 +574,7 @@ function NotesView() {
   useEffect(() => {
     if (!selectedId) return;
     api.getBacklinks(selectedId).then(setBacklinks).catch(() => setBacklinks([]));
+    api.getPlacements(selectedId).then((p) => setPlacements(p.length)).catch(() => setPlacements(0));
   }, [selectedId]);
 
   const selected = notes.find((n) => n.id === selectedId);
@@ -597,6 +601,15 @@ function NotesView() {
     const newBody = editBody.slice(0, completion.startPos) + insert + editBody.slice(completion.startPos + completion.partial.length);
     setEditBody(newBody);
     setCompletion({ type: null, startPos: 0, partial: "" });
+  };
+
+  const handlePromote = async (targetType: string) => {
+    if (!selectedId) return;
+    try {
+      const result = await api.promoteNote(selectedId, targetType);
+      // The promoted node is now a new typed node; show a brief notification.
+      alert(`Promoted to ${targetType}: ${String(result.id).slice(0, 14)}`);
+    } catch { /* server not running */ }
   };
 
   const createNote = async () => {
@@ -674,7 +687,9 @@ function NotesView() {
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium" style={{ fontFamily: "var(--font-display)" }}>{selected.title || "Untitled"}</span>
                 <div className="flex items-center gap-2">
+                  <CloneIndicator count={placements} />
                   <Badge variant="outline" className="font-mono text-[9px]">{selected.id.slice(0, 14)}</Badge>
+                  <PromoteMenu onPromote={handlePromote} />
                   <Button size="sm" variant="outline" onClick={saveNote}>Save</Button>
                 </div>
               </div>
@@ -723,6 +738,91 @@ function NotesView() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── 11. Journal View (TASK-N25 — day-based activity log) ───
+
+function JournalView() {
+  const today = new Date();
+  const [date, setDate] = useState(today.toISOString().slice(0, 10));
+  const [content, setContent] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const loadDay = async (d: string) => {
+    setLoading(true);
+    try {
+      const result = await api.daynote(d);
+      setContent(result.content || "");
+    } catch {
+      setContent("");
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadDay(date); }, [date]);
+
+  const shiftDay = (delta: number) => {
+    const d = new Date(date);
+    d.setDate(d.getDate() + delta);
+    setDate(d.toISOString().slice(0, 10));
+  };
+
+  // Parse daynote lines into structured entries
+  const entries = content
+    .split("\n")
+    .filter((line) => line.trim())
+    .map((line) => {
+      const match = line.match(/^- (\d{2}:\d{2}:\d{2}) (\w+) (\S+) \((\w+)\)$/);
+      if (match) {
+        return { time: match[1], action: match[2], nodeId: match[3], source: match[4] };
+      }
+      return { time: "", action: "", nodeId: "", source: "", raw: line };
+    });
+
+  return (
+    <div>
+      <PageHead kicker="JOURNAL" title="Activity Journal" sub="Your calendar is evidence. Read it honestly." />
+      <div className="mb-4 flex items-center gap-3">
+        <Button size="sm" variant="ghost" onClick={() => shiftDay(-1)}>← Prev</Button>
+        <span className="font-mono text-sm text-muted-foreground">{date}</span>
+        <Button size="sm" variant="ghost" onClick={() => shiftDay(1)}>Next →</Button>
+        {date !== today.toISOString().slice(0, 10) && (
+          <Button size="sm" variant="ghost" onClick={() => setDate(today.toISOString().slice(0, 10))}>Today</Button>
+        )}
+      </div>
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : entries.length === 0 ? (
+        <Card><CardContent className="py-8 text-center">
+          <p className="text-muted-foreground">No activity recorded for {date}.</p>
+        </CardContent></Card>
+      ) : (
+        <div className="flex flex-col gap-1">
+          {entries.map((e, i) => (
+            <div key={i} className="flex items-center gap-3 rounded-md px-3 py-1.5 hover:bg-secondary">
+              <span className="font-mono text-xs text-faint">{e.time || "—"}</span>
+              <Badge variant={
+                e.action === "created" ? "gate-ok" :
+                e.action === "accepted" ? "gate-info" :
+                e.action === "verified" ? "accent" :
+                e.action === "modified" ? "gate-warn" : "outline"
+              } className="capitalize">{e.action || "event"}</Badge>
+              {e.nodeId && (
+                <button
+                  onClick={() => { /* navigate to note if in notes view */ }}
+                  className="font-mono text-xs text-primary hover:underline"
+                >
+                  {e.nodeId.slice(0, 18)}
+                </button>
+              )}
+              {e.source && <span className="text-[10px] text-faint">({e.source})</span>}
+              {e.raw && <span className="text-xs text-muted-foreground">{e.raw}</span>}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

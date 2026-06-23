@@ -64,6 +64,9 @@ pub async fn serve(data_dir: &Path, port: u16) -> Result<(), Box<dyn std::error:
         .route("/api/notes", post(create_note))
         .route("/api/notes/:id", axum::routing::put(update_note).delete(delete_note))
         .route("/api/notes/:id/backlinks", get(note_backlinks))
+        .route("/api/notes/:id/clone", post(clone_note))
+        .route("/api/notes/:id/placements", get(note_placements))
+        .route("/api/notes/:id/promote", post(promote_note))
         .route("/api/cases", post(create_case).get(list_cases))
         .route("/api/sources", post(add_source))
         .route("/api/source-chunks", post(add_source_chunk))
@@ -169,6 +172,46 @@ async fn note_backlinks(
 ) -> Result<Json<Vec<String>>, AppError> {
     let back = st.app().backlinks_for(NodeId::parse(&id)?)?;
     Ok(Json(back.into_iter().map(|n| n.to_lexical()).collect()))
+}
+
+#[derive(Deserialize)]
+struct CloneBody { parent_id: String }
+
+async fn clone_note(
+    State(st): State<Arc<ServerState>>,
+    AxumPath(id): AxumPath<String>,
+    Json(b): Json<CloneBody>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let child = NodeId::parse(&id)?;
+    let parent = NodeId::parse(&b.parent_id)?;
+    // INV-CLONE: check cycle before placing. Index must be fresh.
+    st.index.rebuild(&st.vault)?;
+    if strategynotes_core::graph::would_create_placement_cycle(&st.index, parent, child)? {
+        return Err(AppError(StatusCode::CONFLICT, "clone would create a cycle (INV-CLONE)".into()));
+    }
+    st.app().clone_node(parent, child)?;
+    Ok(Json(serde_json::json!({"cloned": true})))
+}
+
+async fn note_placements(
+    State(st): State<Arc<ServerState>>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<Json<Vec<String>>, AppError> {
+    let placements = st.app().placements_of(NodeId::parse(&id)?)?;
+    Ok(Json(placements.into_iter().map(|n| n.to_lexical()).collect()))
+}
+
+#[derive(Deserialize)]
+struct PromoteBody { target_type: String }
+
+async fn promote_note(
+    State(st): State<Arc<ServerState>>,
+    AxumPath(id): AxumPath<String>,
+    Json(b): Json<PromoteBody>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let ty: NodeType = from_snake_case(&b.target_type)?;
+    let node = st.app().promote_note(NodeId::parse(&id)?, ty)?;
+    Ok(Json(serde_json::to_value(&node)?))
 }
 
 #[derive(Deserialize)]

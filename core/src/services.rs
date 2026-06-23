@@ -84,6 +84,46 @@ impl<'a> App<'a> {
         Ok(())
     }
 
+    // ---- clone/placement operations (Phase 3, INV-CLONE) ----
+
+    /// Clone a note to a new parent. The caller (HTTP layer with the index)
+    /// must check would_create_placement_cycle BEFORE calling this.
+    /// This just adds the Places edge.
+    pub fn clone_node(&self, parent: NodeId, child: NodeId) -> Result<(), Error> {
+        self.link(parent, child, EdgeType::Places)
+    }
+
+    /// Get all placements of a node (all parents that have a Places edge to it).
+    pub fn placements_of(&self, id: NodeId) -> Result<Vec<NodeId>, Error> {
+        let all = self.vault.all()?;
+        let mut parents = Vec::new();
+        for n in &all {
+            let edges = format::edges_of(n).unwrap_or_default();
+            if edges.iter().any(|e| e.edge_type == EdgeType::Places && e.to == id) {
+                parents.push(n.id);
+            }
+        }
+        Ok(parents)
+    }
+
+    // ---- note promotion (Phase 3) ----
+
+    /// Promote a note to a typed strategy object (evidence, bet, claim, etc.).
+    /// Creates a new node of the target type with the note's content.
+    pub fn promote_note(&self, note_id: NodeId, target_type: NodeType) -> Result<Node, Error> {
+        let note = self.vault.get(&note_id)?.ok_or(Error::NotFound(note_id.to_string()))?;
+        let new_id = self.minter.mint();
+        let new_node = Node {
+            id: new_id,
+            ty: target_type,
+            frontmatter: note.frontmatter.clone(),
+            body: note.body.clone(),
+        };
+        self.vault.put(&new_node)?;
+        self.emit(new_id, ActivityKind::Created);
+        Ok(new_node)
+    }
+
     /// Get backlinks for a node (via the derived index).
     pub fn backlinks_for(&self, id: NodeId) -> Result<Vec<NodeId>, Error> {
         // The vault-level edges_of returns out-edges; backlinks need the index.
