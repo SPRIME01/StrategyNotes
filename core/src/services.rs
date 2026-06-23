@@ -17,7 +17,7 @@ use crate::gates;
 use crate::governance::{ActivityEvent, ActivityKind, AgentRun, AgentRunStatus, EventSource};
 use crate::format;
 use crate::identity::NodeId;
-use crate::node::{EdgeStatus, TypedEdge, EdgeType};
+use crate::node::{EdgeStatus, EdgeType, Node, NodeType, TypedEdge};
 use crate::ports::{Clock, EventSink, IdMinter, NodeVault};
 use crate::strategy::{BetStatus, CasePhase, StrategicClaim, StrategyBet, StrategyCase};
 use crate::views::TypedView;
@@ -44,6 +44,65 @@ impl<'a> App<'a> {
 
     fn put<V: TypedView>(&self, v: &V) -> Result<(), Error> {
         self.vault.put(&v.to_node()?)
+    }
+
+    // ---- generic note CRUD (the notes substrate) ----
+
+    /// Create a generic note node. The foundation layer — every strategy object
+    /// is a typed note; this is the plain capture form.
+    pub fn create_note(&self, title: String, body: String) -> Result<Node, Error> {
+        let id = self.minter.mint();
+        let mut frontmatter = crate::node::Frontmatter::new();
+        frontmatter.insert("title".into(), serde_yaml::Value::String(title));
+        let node = Node {
+            id,
+            ty: NodeType::Note,
+            frontmatter,
+            body,
+        };
+        self.vault.put(&node)?;
+        self.emit(id, ActivityKind::Created);
+        Ok(node)
+    }
+
+    /// Update a node's body (and optionally title). Loads, mutates, persists.
+    pub fn update_note(&self, id: NodeId, body: String, title: Option<String>) -> Result<Node, Error> {
+        let mut node = self.vault.get(&id)?.ok_or(Error::NotFound(id.to_string()))?;
+        node.body = body;
+        if let Some(t) = title {
+            node.frontmatter.insert("title".into(), serde_yaml::Value::String(t));
+        }
+        self.vault.put(&node)?;
+        self.emit(id, ActivityKind::Modified);
+        Ok(node)
+    }
+
+    /// Delete a node from the vault.
+    pub fn delete_note(&self, id: NodeId) -> Result<(), Error> {
+        self.vault.delete(&id)?;
+        self.emit(id, ActivityKind::Modified);
+        Ok(())
+    }
+
+    /// Get backlinks for a node (via the derived index).
+    pub fn backlinks_for(&self, id: NodeId) -> Result<Vec<NodeId>, Error> {
+        // The vault-level edges_of returns out-edges; backlinks need the index.
+        // Ponytail: the index is the caller's concern; expose a vault-based
+        // scan for now (the HTTP layer rebuilds the index first).
+        let all = self.vault.all()?;
+        let mut back = Vec::new();
+        for n in &all {
+            if n.id == id { continue; }
+            // Check both frontmatter edges and body refs.
+            let edges = format::edges_of(n).unwrap_or_default();
+            if edges.iter().any(|e| e.to == id) { back.push(n.id); }
+            let body_refs = crate::body::parse_body(&n.body);
+            let id_lex = id.to_lexical();
+            if body_refs.iter().any(|r| r.target == id_lex || r.target == node_title_of(n)) {
+                back.push(n.id);
+            }
+        }
+    Ok(back)
     }
 
     /// Add a typed edge `from --edge_type--> to` by mutating `from`'s
@@ -429,4 +488,13 @@ impl<'a> App<'a> {
         self.emit(id, ActivityKind::Modified);
         Ok(run)
     }
+}
+
+/// Extract a node's title from its frontmatter (for body-ref resolution).
+fn node_title_of(node: &Node) -> String {
+    node.frontmatter
+        .get("title")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string()
 }

@@ -90,4 +90,13 @@ export const api = {
     call<GateResult>("POST", `/api/agent-runs/${id}/accept`, { reviewer }),
   rejectAgentRun: (id: string) => call<WithId>("POST", `/api/agent-runs/${id}/reject`),
   daynote: (date: string) => call<{ content: string }>("GET", `/api/daynote/${date}`),
+  // Notes CRUD
+  createNote: (title: string, body?: string) =>
+    call<WithId & { body?: string }>("POST", "/api/notes", { title, body: body ?? "" }),
+  updateNote: (id: string, body: string, title?: string) =>
+    call<WithId & { body?: string }>("PUT", `/api/notes/${id}`, { body, title }),
+  deleteNote: (id: string) =>
+    call<{ deleted: string }>("DELETE", `/api/notes/${id}`),
+  getBacklinks: (id: string) =>
+    call<string[]>("GET", `/api/notes/${id}/backlinks`),
 };

@@ -61,6 +61,9 @@ pub async fn serve(data_dir: &Path, port: u16) -> Result<(), Box<dyn std::error:
         .route("/api/health", get(health))
         .route("/api/node/:id", get(get_node))
         .route("/api/nodes/:ty", get(list_nodes_by_type))
+        .route("/api/notes", post(create_note))
+        .route("/api/notes/:id", axum::routing::put(update_note).delete(delete_note))
+        .route("/api/notes/:id/backlinks", get(note_backlinks))
         .route("/api/cases", post(create_case).get(list_cases))
         .route("/api/sources", post(add_source))
         .route("/api/source-chunks", post(add_source_chunk))
@@ -119,6 +122,53 @@ async fn list_nodes_by_type(
     let nt: NodeType = from_snake_case(&ty)?;
     let ids = st.index.nodes_by_type(nt)?;
     Ok(Json(ids.into_iter().map(|i| i.to_lexical()).collect()))
+}
+
+// ---- Notes CRUD ----
+
+#[derive(Deserialize)]
+struct CreateNoteBody {
+    title: String,
+    body: Option<String>,
+}
+
+async fn create_note(
+    State(st): State<Arc<ServerState>>,
+    Json(b): Json<CreateNoteBody>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let node = st.app().create_note(b.title, b.body.unwrap_or_default())?;
+    Ok(Json(serde_json::to_value(&node)?))
+}
+
+#[derive(Deserialize)]
+struct UpdateNoteBody {
+    body: String,
+    title: Option<String>,
+}
+
+async fn update_note(
+    State(st): State<Arc<ServerState>>,
+    AxumPath(id): AxumPath<String>,
+    Json(b): Json<UpdateNoteBody>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let node = st.app().update_note(NodeId::parse(&id)?, b.body, b.title)?;
+    Ok(Json(serde_json::to_value(&node)?))
+}
+
+async fn delete_note(
+    State(st): State<Arc<ServerState>>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    st.app().delete_note(NodeId::parse(&id)?)?;
+    Ok(Json(serde_json::json!({"deleted": id})))
+}
+
+async fn note_backlinks(
+    State(st): State<Arc<ServerState>>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<Json<Vec<String>>, AppError> {
+    let back = st.app().backlinks_for(NodeId::parse(&id)?)?;
+    Ok(Json(back.into_iter().map(|n| n.to_lexical()).collect()))
 }
 
 #[derive(Deserialize)]

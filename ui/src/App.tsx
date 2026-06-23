@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { cn } from "./lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Badge } from "./components/ui/badge";
@@ -7,7 +7,7 @@ import {
   GateStatusBadge, ProofLevelBadge, NodeTypeBadge, EvidenceStateBadge,
   PomoCostBadge, MaturityChip, ContradictionBadge, SectionLabel, CapacityMeter,
 } from "./atoms";
-import type { GateResult } from "./api";
+import { api, type GateResult } from "./api";
 
 // ─── types matching api.ts shapes ───
 
@@ -65,9 +65,10 @@ const CAPACITY = { committed: 18, available: 24 };
 
 // ─── shell ───
 
-type View = "cockpit" | "evidence" | "trace" | "bets" | "work" | "runbook" | "daynote" | "vrd" | "agent";
+type View = "notes" | "cockpit" | "evidence" | "trace" | "bets" | "work" | "runbook" | "daynote" | "vrd" | "agent";
 
 const NAV: { group: string; items: { id: View; label: string }[] }[] = [
+  { group: "Notes", items: [{ id: "notes", label: "All Notes" }] },
   { group: "Reality", items: [{ id: "cockpit", label: "Case Cockpit" }, { id: "evidence", label: "Evidence Inbox" }] },
   { group: "Strategy", items: [{ id: "bets", label: "Bet Board" }, { id: "trace", label: "Trace Explorer" }] },
   { group: "Execution", items: [{ id: "work", label: "Work / Timebox" }, { id: "runbook", label: "Execution Runbook" }] },
@@ -127,6 +128,7 @@ export function App() {
         {/* canvas */}
         <main className="flex-1 overflow-y-auto p-6">
           <div className="mx-auto max-w-[1340px]">
+            {view === "notes" && <NotesView />}
             {view === "cockpit" && <CaseCockpit />}
             {view === "evidence" && <EvidenceInbox />}
             {view === "bets" && <BetBoard />}
@@ -523,6 +525,160 @@ function AgentDraftInbox() {
             </CardContent>
           </Card>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── 10. Notes View (the foundation layer) ───
+
+interface NoteItem {
+  id: string;
+  title: string;
+  body: string;
+}
+
+function NotesView() {
+  const [notes, setNotes] = useState<NoteItem[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState("");
+  const [backlinks, setBacklinks] = useState<string[]>([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const loadNotes = async () => {
+    try {
+      const ids = await api.nodesByType("note");
+      const items = await Promise.all(ids.slice(0, 50).map((id) => api.getNode(id)));
+      setNotes(items.map((n) => ({
+        id: String(n.id),
+        title: String((n as Record<string, unknown>).title ?? n.id),
+        body: String(n.body ?? ""),
+      })));
+    } catch { /* server not running */ }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadNotes(); }, []);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    api.getBacklinks(selectedId).then(setBacklinks).catch(() => setBacklinks([]));
+  }, [selectedId]);
+
+  const selected = notes.find((n) => n.id === selectedId);
+  const filtered = query
+    ? notes.filter((n) => n.title.toLowerCase().includes(query.toLowerCase()) || n.body.toLowerCase().includes(query.toLowerCase()))
+    : notes;
+
+  const createNote = async () => {
+    try {
+      const n = await api.createNote("Untitled note");
+      const item = { id: String(n.id), title: "Untitled note", body: "" };
+      setNotes((prev) => [item, ...prev]);
+      setSelectedId(item.id);
+      setEditBody("");
+    } catch { /* server not running */ }
+  };
+
+  const saveNote = async () => {
+    if (!selectedId) return;
+    try {
+      await api.updateNote(selectedId, editBody);
+      setNotes((prev) => prev.map((n) => (n.id === selectedId ? { ...n, body: editBody } : n)));
+    } catch { /* server not running */ }
+  };
+
+  const deleteNote = async (id: string) => {
+    try {
+      await api.deleteNote(id);
+      setNotes((prev) => prev.filter((n) => n.id !== id));
+      if (selectedId === id) setSelectedId(null);
+    } catch { /* server not running */ }
+  };
+
+  return (
+    <div>
+      <PageHead kicker="NOTES" title="All Notes" sub="Capture, write, outline, link, clone, search." />
+      <div className="flex gap-4" style={{ height: "calc(100vh - 180px)" }}>
+        {/* note list */}
+        <div className="flex w-[300px] shrink-0 flex-col gap-2 overflow-y-auto">
+          <div className="flex gap-2">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search notes..."
+              className="flex-1 rounded-md border bg-surface-1 px-3 py-1.5 text-sm outline-none focus:border-primary"
+            />
+            <Button size="sm" onClick={createNote}>+ New</Button>
+          </div>
+          {loading && <p className="text-sm text-muted-foreground">Loading...</p>}
+          {!loading && filtered.length === 0 && <p className="text-sm text-muted-foreground">No notes yet. Create one or start the backend.</p>}
+          {filtered.map((n) => {
+            const tags = Array.from(n.body.matchAll(/#([\w-]+)/g)).map((m) => m[1]);
+            const wikilinks = Array.from(n.body.matchAll(/\[\[([^\]]+)\]\]/g)).map((m) => m[1]);
+            return (
+              <Card key={n.id} className={cn("cursor-pointer transition-colors", selectedId === n.id ? "border-primary" : "hover:border-border-strong")}>
+                <CardContent className="py-3" onClick={() => { setSelectedId(n.id); setEditBody(n.body); }}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">{n.title || "Untitled"}</span>
+                    <button onClick={(e) => { e.stopPropagation(); deleteNote(n.id); }} className="text-faint hover:text-destructive text-xs">✕</button>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{n.body.slice(0, 100) || "Empty note"}</p>
+                  {(tags.length > 0 || wikilinks.length > 0) && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {tags.slice(0, 3).map((t) => <Badge key={t} variant="outline" className="text-[9px]">#{t}</Badge>)}
+                      {wikilinks.slice(0, 2).map((w) => <Badge key={w} variant="outline" className="text-[9px] text-primary">[[{w}]]</Badge>)}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* editor + backlinks */}
+        <div className="flex flex-1 flex-col gap-3 overflow-hidden">
+          {selected ? (
+            <>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium" style={{ fontFamily: "var(--font-display)" }}>{selected.title || "Untitled"}</span>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="font-mono text-[9px]">{selected.id.slice(0, 14)}</Badge>
+                  <Button size="sm" variant="outline" onClick={saveNote}>Save</Button>
+                </div>
+              </div>
+              <textarea
+                value={editBody}
+                onChange={(e) => setEditBody(e.target.value)}
+                onBlur={saveNote}
+                placeholder="Write in markdown. Use [[Title]] for wikilinks, #tag for tags, ((ULID)) for block refs."
+                className="flex-1 resize-none rounded-lg border bg-surface-1 p-4 font-mono text-sm leading-relaxed outline-none focus:border-primary"
+                style={{ fontFamily: "var(--font-mono)" }}
+              />
+              <Card>
+                <CardContent className="py-3">
+                  <SectionLabel>Backlinks ({backlinks.length})</SectionLabel>
+                  {backlinks.length === 0 ? (
+                    <p className="mt-1 text-xs text-muted-foreground">No notes link here yet.</p>
+                  ) : (
+                    <div className="mt-2 flex flex-col gap-1">
+                      {backlinks.map((bl) => (
+                        <button key={bl} onClick={() => { setSelectedId(bl); const n = notes.find((x) => x.id === bl); if (n) setEditBody(n.body); }} className="rounded-md px-2 py-1 text-left text-xs text-primary hover:bg-secondary">
+                          → {bl.slice(0, 20)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <div className="flex flex-1 items-center justify-center">
+              <p className="text-muted-foreground">Select a note or create a new one.</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
