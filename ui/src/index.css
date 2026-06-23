@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+/*
+ * StrategyNotes design system — precision instrument, not consumer SaaS.
+ * Dark-first. One calm cyan accent. Monospace for every datum that is
+ * evidence of work (IDs, proof levels, pomos, timestamps, gate labels).
+ * Maturity = gates + debt, NEVER percent-complete.
+ *
+ * Tokens adapted from the Open Design prototype (DESIGN.md) mapped into
+ * Tailwind v4 @theme variables + shadcn-compatible semantic names.
+ */
+
+@theme {
+  /* canvas — deep ink, slightly cool */
+  --color-background: oklch(14.5% 0.006 264);
+  --color-foreground: oklch(95% 0.003 264);
+
+  /* surfaces — depth by tone, not outline */
+  --color-card: oklch(17.5% 0.007 264);
+  --color-card-foreground: oklch(95% 0.003 264);
+  --color-surface-1: oklch(17.5% 0.007 264);
+  --color-surface-2: oklch(24% 0.009 264);
+  --color-surface-3: oklch(28% 0.011 264);
+
+  /* muted / secondary */
+  --color-muted: oklch(24% 0.009 264);
+  --color-muted-foreground: oklch(80% 0.008 264);
+  --color-secondary: oklch(20.5% 0.008 264);
+  --color-secondary-foreground: oklch(95% 0.003 264);
+
+  /* one accent — calm instrument cyan */
+  --color-primary: oklch(76% 0.11 219);
+  --color-primary-foreground: oklch(14.5% 0.006 264);
+
+  /* structure — hairline borders */
+  --color-border: oklch(26% 0.009 264);
+  --color-input: oklch(26% 0.009 264);
+  --color-ring: oklch(76% 0.11 219);
+
+  /* gate semantics — paired ink + surface tint */
+  --color-gate-ok: oklch(78% 0.13 152);
+  --color-gate-ok-bg: oklch(78% 0.13 152 / 0.10);
+  --color-gate-bad: oklch(70% 0.16 24);
+  --color-gate-bad-bg: oklch(70% 0.16 24 / 0.10);
+  --color-gate-warn: oklch(80% 0.12 78);
+  --color-gate-warn-bg: oklch(80% 0.12 78 / 0.10);
+  --color-gate-info: oklch(76% 0.08 245);
+  --color-gate-info-bg: oklch(76% 0.08 245 / 0.10);
+  --color-destructive: oklch(70% 0.16 24);
+
+  /* ink scale */
+  --color-fg-dim: oklch(80% 0.008 264);
+  --color-muted-ink: oklch(60% 0.012 264);
+  --color-faint: oklch(44% 0.012 264);
+
+  /* type system */
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --font-display: "Josefin Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* radii */
+  --radius: 7px;
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+::selection {
+  background: oklch(76% 0.11 219 / 0.20);
+}
+
+/* numerics use tabular figures */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

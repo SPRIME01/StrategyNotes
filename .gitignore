@@ -48,3 +48,5 @@ strategynotes-data/
 # Tauri build artifacts (src-tauri is a standalone crate; built separately)
 src-tauri/target/
 src-tauri/gen/
+
+.tmp/

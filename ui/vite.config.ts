@@ -1,11 +1,9 @@
-import { defineConfig } from "vitest/config";
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import { defineConfig } from "vitest/config";
 
-// Vite + Vitest config. The dev proxy forwards /api -> the Rust HTTP server
-// (run `cargo run -p strategynotes-server -- serve`). Production builds can be
-// served by Tauri (Phase 12 sub-slice) or any static host + the API server.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   server: {
     proxy: {
       "/api": "http://127.0.0.1:8787",
