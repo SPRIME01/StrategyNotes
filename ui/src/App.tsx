@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode, type ChangeEvent } from "react";
 import { cn } from "./lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Badge } from "./components/ui/badge";
@@ -8,6 +8,10 @@ import {
   PomoCostBadge, MaturityChip, ContradictionBadge, SectionLabel, CapacityMeter,
 } from "./atoms";
 import { api, type GateResult } from "./api";
+import {
+  TagsBar, SortControl, AutocompleteDropdown, detectCompletion,
+  collectTags, type CompletionState, type SortMode,
+} from "./components/notes";
 
 // ─── types matching api.ts shapes ───
 
@@ -545,6 +549,9 @@ function NotesView() {
   const [backlinks, setBacklinks] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [sortMode, setSortMode] = useState<SortMode>("recent");
+  const [completion, setCompletion] = useState<CompletionState>({ type: null, startPos: 0, partial: "" });
 
   const loadNotes = async () => {
     try {
@@ -567,9 +574,30 @@ function NotesView() {
   }, [selectedId]);
 
   const selected = notes.find((n) => n.id === selectedId);
-  const filtered = query
-    ? notes.filter((n) => n.title.toLowerCase().includes(query.toLowerCase()) || n.body.toLowerCase().includes(query.toLowerCase()))
-    : notes;
+
+  // Phase 2: tag collection + filtered/sorted list
+  const allTags = collectTags(notes);
+  const noteTitles = notes.map((n) => n.title).filter((t) => t && t !== "Untitled note");
+  const filtered = notes
+    .filter((n) => !query || n.title.toLowerCase().includes(query.toLowerCase()) || n.body.toLowerCase().includes(query.toLowerCase()))
+    .filter((n) => !activeTag || new RegExp(`#${activeTag}\\b`).test(n.body))
+    .sort((a, b) => sortMode === "alpha" ? a.title.localeCompare(b.title) : 0);
+
+  // Phase 2: autocomplete
+  const handleEditChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
+    const text = e.target.value;
+    setEditBody(text);
+    const cursorPos = e.target.selectionStart ?? text.length;
+    setCompletion(detectCompletion(text, cursorPos));
+  };
+
+  const handleCompletion = (value: string) => {
+    if (!completion.type) return;
+    const insert = completion.type === "wikilink" ? `${value}]]` : value;
+    const newBody = editBody.slice(0, completion.startPos) + insert + editBody.slice(completion.startPos + completion.partial.length);
+    setEditBody(newBody);
+    setCompletion({ type: null, startPos: 0, partial: "" });
+  };
 
   const createNote = async () => {
     try {
@@ -610,8 +638,10 @@ function NotesView() {
               placeholder="Search notes..."
               className="flex-1 rounded-md border bg-surface-1 px-3 py-1.5 text-sm outline-none focus:border-primary"
             />
+            <SortControl value={sortMode} onChange={setSortMode} />
             <Button size="sm" onClick={createNote}>+ New</Button>
           </div>
+          {allTags.length > 0 && <TagsBar tags={allTags} activeTag={activeTag} onSelect={setActiveTag} />}
           {loading && <p className="text-sm text-muted-foreground">Loading...</p>}
           {!loading && filtered.length === 0 && <p className="text-sm text-muted-foreground">No notes yet. Create one or start the backend.</p>}
           {filtered.map((n) => {
@@ -648,14 +678,27 @@ function NotesView() {
                   <Button size="sm" variant="outline" onClick={saveNote}>Save</Button>
                 </div>
               </div>
-              <textarea
-                value={editBody}
-                onChange={(e) => setEditBody(e.target.value)}
-                onBlur={saveNote}
-                placeholder="Write in markdown. Use [[Title]] for wikilinks, #tag for tags, ((ULID)) for block refs."
-                className="flex-1 resize-none rounded-lg border bg-surface-1 p-4 font-mono text-sm leading-relaxed outline-none focus:border-primary"
-                style={{ fontFamily: "var(--font-mono)" }}
-              />
+              <div className="relative flex-1">
+                <textarea
+                  value={editBody}
+                  onChange={handleEditChange}
+                  onBlur={saveNote}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setCompletion({ type: null, startPos: 0, partial: "" });
+                  }}
+                  placeholder="Write in markdown. Use [[Title]] for wikilinks, #tag for tags, ((ULID)) for block refs."
+                  className="h-full w-full resize-none rounded-lg border bg-surface-1 p-4 font-mono text-sm leading-relaxed outline-none focus:border-primary"
+                  style={{ fontFamily: "var(--font-mono)" }}
+                />
+                {completion.type && (
+                  <AutocompleteDropdown
+                    state={completion}
+                    noteTitles={noteTitles}
+                    allTags={allTags.map((t) => t.name)}
+                    onSelect={handleCompletion}
+                  />
+                )}
+              </div>
               <Card>
                 <CardContent className="py-3">
                   <SectionLabel>Backlinks ({backlinks.length})</SectionLabel>
