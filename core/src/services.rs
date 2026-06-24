@@ -77,6 +77,36 @@ impl<'a> App<'a> {
         Ok(node)
     }
 
+    /// Gate-safe in-place concept-doc edit (OQ: in-place re-type). Re-tags
+    /// `type`, sets `body`, and merges arbitrary frontmatter — EXCEPT it will
+    /// never set `status`, the only gated lifecycle field. Lifecycle
+    /// transitions (Accepted/Approved/Committed/Verified/Validated) must go
+    /// through their gate endpoints (accept_evidence, approve_bet, …), so this
+    /// cannot bypass a gate. Unknown keys are preserved (INV-PORT).
+    pub fn update_node(
+        &self,
+        id: NodeId,
+        ty: Option<NodeType>,
+        body: Option<String>,
+        mut frontmatter: crate::node::Frontmatter,
+    ) -> Result<Node, Error> {
+        // The one denied key: lifecycle status is gate-owned.
+        frontmatter.remove("status");
+        let mut node = self.vault.get(&id)?.ok_or(Error::NotFound(id.to_string()))?;
+        if let Some(t) = ty {
+            node.ty = t;
+        }
+        if let Some(b) = body {
+            node.body = b;
+        }
+        for (k, v) in frontmatter {
+            node.frontmatter.insert(k, v);
+        }
+        self.vault.put(&node)?;
+        self.emit(id, ActivityKind::Modified);
+        Ok(node)
+    }
+
     /// Delete a node from the vault.
     pub fn delete_note(&self, id: NodeId) -> Result<(), Error> {
         self.vault.delete(&id)?;

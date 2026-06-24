@@ -60,7 +60,7 @@ pub async fn serve(data_dir: &Path, port: u16) -> Result<(), Box<dyn std::error:
 
     let app = Router::new()
         .route("/api/health", get(health))
-        .route("/api/node/:id", get(get_node))
+        .route("/api/node/:id", get(get_node).patch(patch_node))
         .route("/api/nodes/:ty", get(list_nodes_by_type))
         .route("/api/notes", post(create_note))
         .route("/api/notes/:id", axum::routing::put(update_note).delete(delete_note))
@@ -157,6 +157,36 @@ async fn update_note(
     Json(b): Json<UpdateNoteBody>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let node = st.app().update_note(NodeId::parse(&id)?, b.body, b.title)?;
+    Ok(Json(serde_json::to_value(&node)?))
+}
+
+/// PATCH /api/node/:id — gate-safe concept-doc edit. Re-tags type, sets body,
+/// merges frontmatter. `status` is ignored (gate-owned); lifecycle transitions
+/// use accept_evidence / approve_bet / commit_work_package / etc.
+#[derive(Deserialize)]
+struct PatchNodeBody {
+    #[serde(rename = "type")]
+    ty: Option<String>,
+    body: Option<String>,
+    #[serde(default)]
+    frontmatter: serde_json::Map<String, serde_json::Value>,
+}
+
+async fn patch_node(
+    State(st): State<Arc<ServerState>>,
+    AxumPath(id): AxumPath<String>,
+    Json(b): Json<PatchNodeBody>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let ty = match b.ty {
+        Some(s) => Some(from_snake_case::<NodeType>(&s)?),
+        None => None,
+    };
+    // JSON value → YAML frontmatter value (the two are structurally compatible).
+    let fm: strategynotes_core::node::Frontmatter = serde_json::from_value(
+        serde_json::Value::Object(b.frontmatter),
+    )
+    .map_err(|e| AppError(StatusCode::BAD_REQUEST, format!("frontmatter: {e}")))?;
+    let node = st.app().update_node(NodeId::parse(&id)?, ty, b.body, fm)?;
     Ok(Json(serde_json::to_value(&node)?))
 }
 

@@ -1,12 +1,12 @@
-// TASK-E03 — NoteEditor. Wraps the editing surface (textarea; CodeMirror is
-// TASK-N19/N20, not yet done — ponytail: ship the textarea that works, mark
-// the ceiling). Owns the draft, debounced autosave (1s), and the unified
-// trigger detection for [[ wikilink, # tag, / command, @ mention.
+// TASK-E03 / N19 / N20 — NoteEditor. The editing surface is CodeMirror 6
+// (markdown, line-wrap, dark theme). Owns the draft, debounced autosave (1s),
+// and the unified trigger detection for [[ wikilink, # tag, / command, @ mention.
+// Overlays anchor at the caret via coordsAtPos.
 //
-// ponytail ceiling: textarea + overlay dropdowns. Upgrade to CodeMirror 6 when
-// block-level decorations (callout widgets, syntax regions) are required.
+// ponytail ceiling: decorations (callout widgets, block-as-node / ((ref))) are a
+// follow-on ViewPlugin slice. This is the surface + caret-anchored overlays.
 
-import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AutocompleteDropdown,
   detectCompletion,
@@ -14,6 +14,8 @@ import {
 import { CommandPalette, type BlockCommand } from "./CommandPalette";
 import { MentionAutocomplete, type MentionResult } from "./MentionAutocomplete";
 import { TypeSelector } from "./TypeSelector";
+import type { EditorSurface, CursorInfo } from "../../editor/port";
+import { CodeMirrorSurface } from "../../editor/adapters/CodeMirrorSurface";
 import type { SaveState } from "./EditorHeader";
 import { fmString, type GraphNode } from "../../lib/node";
 
@@ -47,7 +49,11 @@ export interface NoteEditorProps {
   onSave: (body: string) => void;
   onMentionInsert?: (title: string) => void;
   onPromote?: (newId: string, type: string) => void;
+  /** Open a note when a [[link]]/((ref)) chip is clicked (meaning stays outside the surface). */
+  onOpenNote?: (titleOrId: string) => void;
   saveState?: SaveState;
+  /** Editor surface port (default: CodeMirror). Inject to swap the engine. */
+  Surface?: EditorSurface;
   /** Search notes by title for the @mention panel (async). */
   searchNotes?: (q: string) => Promise<MentionResult[]>;
   placeholder?: string;
@@ -64,7 +70,9 @@ export function NoteEditor({
   onSave,
   onMentionInsert,
   onPromote,
+  onOpenNote,
   saveState = "idle",
+  Surface = CodeMirrorSurface,
   searchNotes,
   placeholder,
   debounceMs = 1000,
@@ -72,7 +80,8 @@ export function NoteEditor({
   const [draft, setDraft] = useState(note.body ?? "");
   const [trigger, setTrigger] = useState<TriggerState | null>(null);
   const [mentionResults, setMentionResults] = useState<MentionResult[] | null>(null);
-  const taRef = useRef<HTMLTextAreaElement>(null);
+  const [cursor, setCursor] = useState<CursorInfo | null>(null);
+  const cursorRef = useRef<CursorInfo | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Reset draft when the note changes.
@@ -86,13 +95,18 @@ export function NoteEditor({
     timer.current = setTimeout(() => onSave(body), debounceMs);
   };
 
-  const handleChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
-    const text = e.target.value;
-    const cursor = e.target.selectionStart ?? text.length;
+  const handleTextChange = (text: string) => {
     setDraft(text);
     onChange?.(text);
-    setTrigger(detectTrigger(text, cursor));
+    setTrigger(detectTrigger(text, cursorRef.current?.pos ?? text.length));
     scheduleSave(text);
+  };
+
+  const handleCursor = (info: CursorInfo) => {
+    cursorRef.current = info;
+    setCursor(info);
+    // Re-evaluate trigger on caret move (e.g. navigating into an existing [[ ).
+    setTrigger(detectTrigger(draft, info.pos));
   };
 
   const closeTrigger = () => setTrigger(null);
@@ -109,7 +123,6 @@ export function NoteEditor({
     onChange?.(next);
     scheduleSave(next);
     closeTrigger();
-    requestAnimationFrame(() => taRef.current?.focus());
   };
 
   // ── wikilink/tag: replace the partial token ──
@@ -122,7 +135,6 @@ export function NoteEditor({
     onChange?.(next);
     scheduleSave(next);
     closeTrigger();
-    requestAnimationFrame(() => taRef.current?.focus());
   };
 
   // ── mention: insert [[Title]] and notify parent ──
@@ -137,7 +149,6 @@ export function NoteEditor({
     onMentionInsert?.(m.title);
     closeTrigger();
     setMentionResults(null);
-    requestAnimationFrame(() => taRef.current?.focus());
   };
 
   // Async mention search.
@@ -148,10 +159,12 @@ export function NoteEditor({
     return () => { cancelled = true; };
   }, [trigger, searchNotes]);
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Escape") { closeTrigger(); setMentionResults(null); }
-    // Let the dropdown components handle up/down/enter via their own handlers
-    // when open; here we only short-circuit Escape.
+  // Caret-anchored overlay style (fixed to viewport; rect is screen coords).
+  const overlayStyle = (place: "above" | "below"): React.CSSProperties => {
+    const r = cursor?.rect;
+    if (!r) return { display: "none" };
+    const top = place === "above" ? r.top - 8 : r.bottom + 4;
+    return { position: "fixed", left: r.left, top, transform: place === "above" ? "translateY(-100%)" : undefined, zIndex: 50 };
   };
 
   return (
@@ -177,42 +190,44 @@ export function NoteEditor({
         </div>
       </div>
 
-      {/* body */}
+      {/* body — editor surface (port; CodeMirror is the default adapter) */}
       <div className="relative min-h-0 flex-1">
-        <textarea
-          ref={taRef}
+        <Surface
           value={draft}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
+          onChange={handleTextChange}
+          onCursor={handleCursor}
+          noteTitles={noteTitles}
+          tags={tags}
+          onOpenNote={onOpenNote}
+          autoFocus
           placeholder={placeholder ?? "Write in markdown. [[Title]] wikilink · #tag · / for blocks · @ to mention."}
-          className="h-full w-full resize-none bg-surface-2 px-6 py-5 font-mono text-sm leading-relaxed outline-none"
-          style={{ fontFamily: "var(--font-mono)" }}
         />
 
-        {/* overlays — anchored bottom of the textarea region */}
+        {/* overlays — anchored at the caret (adapter-neutral) */}
         {trigger?.type === "command" && (
-          <CommandPalette
-            query={trigger.partial}
-            onSelect={applyCommand}
-            onClose={closeTrigger}
-            anchor={() => taRef.current}
-          />
+          <div style={overlayStyle("below")}>
+            <CommandPalette query={trigger.partial} onSelect={applyCommand} onClose={closeTrigger} />
+          </div>
         )}
         {trigger?.type === "mention" && (
-          <MentionAutocomplete
-            query={trigger.partial}
-            results={mentionResults ?? mentionCandidates ?? []}
-            onSelect={applyMention}
-            onClose={() => { closeTrigger(); setMentionResults(null); }}
-          />
+          <div style={overlayStyle("above")}>
+            <MentionAutocomplete
+              query={trigger.partial}
+              results={mentionResults ?? mentionCandidates ?? []}
+              onSelect={applyMention}
+              onClose={() => { closeTrigger(); setMentionResults(null); }}
+            />
+          </div>
         )}
         {(trigger?.type === "wikilink" || trigger?.type === "tag") && (
-          <AutocompleteDropdown
-            state={{ type: trigger.type, startPos: trigger.startPos, partial: trigger.partial }}
-            noteTitles={noteTitles}
-            allTags={tags}
-            onSelect={applyCompletion}
-          />
+          <div style={overlayStyle("above")}>
+            <AutocompleteDropdown
+              state={{ type: trigger.type, startPos: trigger.startPos, partial: trigger.partial }}
+              noteTitles={noteTitles}
+              allTags={tags}
+              onSelect={applyCompletion}
+            />
+          </div>
         )}
       </div>
     </div>

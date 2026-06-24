@@ -982,3 +982,105 @@ Proper fix = schema-version/migrate-on-open in sqlite_index.rs. Recorded as a
 follow-up; not in this slice's scope.
 
 Status: Accepted
+
+---
+
+## EV-016 — Constraints/traces map + OQ-011 fix + gate-safe PATCH + CodeMirror
+
+Date: 2026-06-23
+Slice: gap-traces.md (Fixes 1–3)
+Agent: main (this session)
+Spec IDs: SDS-INDEX, SDS-NODE, SDS-GATE, INV-DUR, INV-PORT, INV-EDGE,
+INV-HUMAN; PRD-012; TASK-N19/N20.
+
+Identified (`.agents/plans/gap-traces.md`): for each gap — constraints,
+dimensions, integrations (files · spec IDs · graph edges), fix. Master
+constraint: the gate engine gates LIFECYCLE TRANSITIONS, not field writes — so
+`status` is the only frontmatter key a generic edit must deny.
+
+Fix 1 — OQ-011 (stale derived index crashes startup):
+- `adapters/src/sqlite_index.rs`: SCHEMA_VERSION pragma + migrate(); on version
+  mismatch DROP derived tables → init recreates → caller rebuilds from vault.
+  INV-DUR honored (derived cache never blocks startup).
+- Test: `stale_schema_migrates_instead_of_crashing` (5/5 sqlite_index tests pass).
+
+Fix 2 — gate-safe in-place concept-doc edit:
+- `core/services.rs::update_node` (type + body + frontmatter merge, denies
+  `status`, preserves unknown keys — INV-PORT).
+- `server/http.rs`: PATCH /api/node/:id (JSON frontmatter → YAML).
+- e2e: PATCH re-typed note→strategy_bet (same id), merged kill_criteria+owner,
+  IGNORED status:"approved" (bet stays unapproved — gate intact). Verified the
+  node then appears in nodesByType("strategy_bet") → Bet Board.
+
+Fix 3 — CodeMirror 6 editor surface (TASK-N19/N20):
+- Deps: @codemirror/{state,view,commands,lang-markdown,language}.
+- `components/editor/CodeMirror.tsx`: markdown, line-wrap, dark theme, value
+  sync (no clobber), caret rect via coordsAtPos (jsdom-guarded).
+- NoteEditor: textarea→CM; triggers (/ @ [[ #) re-anchored at caret; command/
+  mention palette use capture-phase window keydown (CM owns the key stream).
+- Tests drive CM via EditorView.findFromDOM + dispatch (jsdom can't simulate
+  contentEditable input). 3/3 NoteEditor tests pass.
+
+Verification:
+```bash
+pnpm -C ui typecheck   # clean
+pnpm -C ui test        # 34 passing (7 files)
+pnpm -C ui build       # 1833 modules, ok
+cargo test -p strategynotes-adapters --test sqlite_index  # 5/5
+# e2e (server 8797): PATCH re-type + status-denied + nodesByType reflects
+```
+
+Deferred (traced in gap-traces.md, own slices): block-as-node (PRD-002, needs
+CM ViewPlugin decorations), callout widgets (CM decoration), ORD/SLD/EDS/VSD
+generated views (incremental on ERD pattern), OKF import (inverse of export),
+clones UX (Places edges).
+
+Evidence types: EV-TST (34 UI + 5 backend), EV-TYP, EV-BLD, EV-SMOKE (PATCH
+e2e), EV-CT.
+
+Status: Accepted
+
+---
+
+## EV-017 — CodeMirror behind Ports & Adapters (reversible) + projection model
+
+Date: 2026-06-23
+Slice: gap-traces.md (CM-as-projection; hexagonal editor boundary)
+Agent: main (this session)
+Spec IDs: AGENTS.md §10 (Ports & Adapters), PRD-012, INV-DUR, INV-PORT.
+
+Change: CodeMirror is no longer imported by editor logic. It is one ADAPTER
+over a neutral PORT — the editor-engine choice is reversible.
+
+Boundary:
+- `ui/src/editor/port.ts` — `EditorSurface` interface. The ONLY thing NoteEditor
+  depends on for the body.
+- `ui/src/editor/tokens.ts` — ADAPTER-NEUTRAL markdown projection model
+  (tokenizeMarkdown → tag/wikilink/ref/callout; isResolved). No editor, no CM.
+  8 unit tests.
+- `ui/src/editor/adapters/CodeMirrorSurface.tsx` — the ONLY file importing
+  @codemirror/*. Renders tokens as NON-DESTRUCTIVE decorations (mark: tok-tag/
+  tok-link/tok-link-unresolved/tok-ref; line: tok-callout-{tip,warn,info}).
+  Plain markdown stays canonical — no hidden editor-only model. Click-to-open
+  maps click→markdown pos→token→onOpenNote intent.
+- `ui/src/editor/adapters/TextareaSurface.tsx` — dependency-free second adapter
+  (fallback/test double).
+
+Reversibility PROOF: `ui/src/editor/port.test.tsx` renders NoteEditor with
+Surface={TextareaSurface} (no CodeMirror) and asserts edit+save — the contract
+is not coupled to CM. Swap = one prop.
+
+Meaning untouched: type/status/gates/typed edges/persistence stay in markdown +
+core + the gate-safe API (EV-016). The surface renders/edits affordances only.
+
+Verification:
+pnpm -C ui typecheck   # clean
+pnpm -C ui test        # 43 passing (9 files)
+pnpm -C ui build       # 1834 modules, ok
+pnpm -C ui dev         # HTTP 200, no vite errors
+
+Deferred (own slices): per-block ULID + ((ref)) block widgets; replacement chip
+widgets (currently non-destructive marks); hover preview cards; clones UX.
+All build on this port; none touch NoteEditor's dependency on it.
+
+Status: Accepted

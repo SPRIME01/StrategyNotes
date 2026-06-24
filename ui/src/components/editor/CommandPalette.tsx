@@ -38,12 +38,10 @@ export function CommandPalette({
   query,
   onSelect,
   onClose,
-  anchor,
 }: {
   query: string;
   onSelect: (cmd: BlockCommand) => void;
   onClose: () => void;
-  anchor?: () => HTMLElement | null;
 }) {
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -56,19 +54,18 @@ export function CommandPalette({
 
   useEffect(() => { setActive(0); }, [query]);
 
-  // Steal keyboard navigation from the textarea while open.
+  // Steal keyboard navigation via a capture-phase window listener so it works
+  // even though CodeMirror owns the key stream while mounted.
   useEffect(() => {
-    const el = anchor?.() ?? null;
-    if (!el) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(a + 1, results.length - 1)); }
-      else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
-      else if (e.key === "Enter") { e.preventDefault(); const cmd = results[active]; if (cmd) onSelect(cmd); }
-      else if (e.key === "Escape") { e.preventDefault(); onClose(); }
+      if (e.key === "ArrowDown") { e.preventDefault(); e.stopPropagation(); setActive((a) => Math.min(a + 1, results.length - 1)); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); e.stopPropagation(); setActive((a) => Math.max(a - 1, 0)); }
+      else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); const cmd = results[active]; if (cmd) onSelect(cmd); }
+      else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); }
     };
-    el.addEventListener("keydown", handler);
-    return () => el.removeEventListener("keydown", handler);
-  }, [results, active, onSelect, onClose, anchor]);
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
+  }, [results, active, onSelect, onClose]);
 
   useEffect(() => {
     listRef.current?.querySelector(`[data-idx="${active}"]`)?.scrollIntoView?.({ block: "nearest" });
@@ -76,7 +73,7 @@ export function CommandPalette({
 
   if (results.length === 0) {
     return (
-      <div className="command-palette absolute left-6 top-2 z-50 w-64 rounded-lg border border-border-strong bg-surface-3 p-3 text-xs text-muted-foreground shadow-lg">
+      <div className="command-palette w-64 rounded-lg border border-border-strong bg-surface-3 p-3 text-xs text-muted-foreground shadow-lg">
         No matching block.
       </div>
     );
@@ -85,7 +82,7 @@ export function CommandPalette({
   return (
     <div
       ref={listRef}
-      className="command-palette absolute left-6 top-2 z-50 w-64 overflow-hidden rounded-lg border border-border-strong bg-surface-3 shadow-lg"
+      className="command-palette w-64 overflow-hidden rounded-lg border border-border-strong bg-surface-3 shadow-lg"
     >
       <div className="border-b border-border px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-faint">
         Insert block

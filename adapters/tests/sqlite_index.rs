@@ -159,3 +159,39 @@ fn rebuild_after_vault_change_reflects_new_state() {
     idx.rebuild(&vault).unwrap();
     assert_eq!(idx.nodes_by_type(NodeType::StrategyCase).unwrap().len(), 1);
 }
+
+/// OQ-011: a stale derived index (old schema, no `title` column, user_version=0)
+/// must NOT crash on open. It migrates (drops + re-inits) and rebuilds cleanly.
+#[test]
+fn stale_schema_migrates_instead_of_crashing() {
+    use rusqlite::Connection;
+    let tmp = tempfile::tempdir().unwrap();
+    let db = tmp.path().join("stale.db");
+
+    // Simulate an OLD schema: nodes WITHOUT a title column, user_version unset.
+    {
+        let conn = Connection::open(&db).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE nodes (id TEXT PRIMARY KEY, type TEXT NOT NULL, body TEXT NOT NULL);
+             PRAGMA user_version = 0;",
+        )
+        .unwrap();
+        conn.execute("INSERT INTO nodes (id, type, body) VALUES ('01HZX8KQBJ9GYWN3QFVYRXTXMS','strategy_case','old')", [])
+            .unwrap();
+    }
+
+    // Opening must not error on `CREATE INDEX ... ON nodes(title)`.
+    let idx = SQLiteIndex::open_file(&db).unwrap();
+
+    // Stamp is now current.
+    {
+        let conn = Connection::open(&db).unwrap();
+        let v: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(v, 2);
+    }
+
+    // The stale row was dropped (derived cache, rebuildable). Rebuild from vault.
+    let (vault, _) = seed_vault(tmp.path());
+    idx.rebuild(&vault).unwrap();
+    assert_eq!(idx.nodes_by_type(NodeType::StrategyCase).unwrap().len(), 1);
+}

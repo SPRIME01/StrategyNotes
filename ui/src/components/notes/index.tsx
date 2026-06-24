@@ -183,7 +183,7 @@ export function AutocompleteDropdown({
   if (results.length === 0) return null;
 
   return (
-    <div className="absolute bottom-full left-0 right-0 mb-1 rounded-lg border bg-surface-2 shadow-lg overflow-hidden z-50">
+    <div className="rounded-lg border bg-surface-2 shadow-lg overflow-hidden">
       {results.map((r) => (
         <button
           key={r}

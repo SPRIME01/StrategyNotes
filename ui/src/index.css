@@ -108,3 +108,41 @@ body {
   font: 500 20px/1.25 var(--font-sans);
   letter-spacing: -0.01em;
 }
+
+/* ─── Editor projection decorations (non-destructive; markdown stays canonical) ─── */
+/* These style inline tokens rendered by the CodeMirror adapter from the neutral
+   token model (editor/tokens.ts). They never mutate the source text. */
+.cm-content .tok-tag {
+  color: var(--color-accent-ink);
+  background: var(--color-accent-dim);
+  border-radius: 3px;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.cm-content .tok-link {
+  color: var(--color-primary);
+  border-bottom: 1px dotted var(--color-primary);
+  cursor: pointer;
+}
+.cm-content .tok-link-unresolved {
+  color: var(--color-gate-warn);
+  border-bottom: 1px dashed var(--color-gate-warn);
+  background: var(--color-gate-warn-bg);
+}
+.cm-content .tok-ref {
+  color: var(--color-muted-foreground);
+  font-size: 0.85em;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 3px;
+  padding: 0 3px;
+  cursor: pointer;
+}
+/* Callout block: a line decoration on `> [!tip|warn|info]` fences. */
+.cm-content .tok-callout {
+  border-left: 3px solid var(--color-border-strong);
+  background: var(--color-surface-3);
+  padding-left: 6px;
+}
+.cm-content .tok-callout-tip { border-left-color: var(--color-gate-info); background: var(--color-gate-info-bg); }
+.cm-content .tok-callout-warn { border-left-color: var(--color-gate-warn); background: var(--color-gate-warn-bg); }
+.cm-content .tok-callout-info { border-left-color: var(--color-border-strong); background: var(--color-surface-3); }

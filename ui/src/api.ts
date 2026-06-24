@@ -124,6 +124,9 @@ export const api = {
   /** Add a typed edge `from(id) --edge_type--> to`. Gate-safe (structural only). */
   linkNode: (id: string, to: string, edgeType: string) =>
     call<{ linked: boolean; edge: string; to: string }>("POST", `/api/node/${id}/edge`, { to, edge_type: edgeType }),
+  /** Gate-safe in-place concept-doc edit. `status` is ignored (gate-owned). */
+  patchNode: (id: string, patch: { type?: string; body?: string; frontmatter?: Record<string, unknown> }) =>
+    call<WithId>("PATCH", `/api/node/${id}`, patch),
   /** Typed edges of a node (parsed from frontmatter by the server's get_node). */
   edgeTypes: () => EDGE_TYPES,
 };

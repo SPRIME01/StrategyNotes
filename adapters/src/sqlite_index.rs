@@ -31,12 +31,38 @@ impl SQLiteIndex {
         Ok(Self { conn: Mutex::new(conn), path: None })
     }
 
-    /// Open (or create) a file-backed index.
+    /// Open (or create) a file-backed index. If the on-disk schema is stale
+    /// (older version), the derived tables are dropped and re-initialized —
+    /// INV-DUR: SQLite is a rebuildable cache, so a stale cache must never
+    /// block startup. The caller rebuilds from the vault.
     pub fn open_file(path: impl AsRef<std::path::Path>) -> Result<Self, Error> {
         let path = path.as_ref().to_path_buf();
         let conn = Connection::open(&path).map_err(rusqlite_err)?;
+        Self::migrate(&conn)?;
         Self::init(&conn)?;
         Ok(Self { conn: Mutex::new(conn), path: Some(path) })
+    }
+
+    /// Bump whenever the schema changes. On mismatch, drop all derived tables
+    /// so `init` recreates them cleanly (fixes OQ-011: stale `nodes` without a
+    /// `title` column crashed CREATE INDEX on startup).
+    const SCHEMA_VERSION: i32 = 2;
+
+    fn migrate(conn: &Connection) -> Result<(), Error> {
+        let current: i32 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap_or(0);
+        if current == Self::SCHEMA_VERSION {
+            return Ok(());
+        }
+        // Stale or new: drop derived tables (data is rebuildable from markdown).
+        conn.execute_batch(
+            "DROP TABLE IF EXISTS nodes;
+             DROP TABLE IF EXISTS edges;
+             DROP TABLE IF EXISTS body_refs;",
+        )
+        .map_err(rusqlite_err)?;
+        Ok(())
     }
 
     fn init(conn: &Connection) -> Result<(), Error> {
@@ -65,6 +91,9 @@ impl SQLiteIndex {
             CREATE INDEX IF NOT EXISTS idx_body_target ON body_refs(target);",
         )
         .map_err(rusqlite_err)?;
+        // Stamp the schema version now that init succeeded.
+        conn.execute_batch(&format!("PRAGMA user_version = {};", Self::SCHEMA_VERSION))
+            .map_err(rusqlite_err)?;
         Ok(())
     }
 }

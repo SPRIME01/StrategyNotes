@@ -51,7 +51,7 @@ export function MentionAutocomplete({
 
   if (filtered.length === 0) {
     return (
-      <div className="absolute bottom-full left-6 mb-1 z-50 w-72 rounded-lg border border-border-strong bg-surface-3 p-2 text-xs text-muted-foreground shadow-lg">
+      <div className="w-72 rounded-lg border border-border-strong bg-surface-3 p-2 text-xs text-muted-foreground shadow-lg">
         No notes match “{query}”.
       </div>
     );
@@ -60,7 +60,7 @@ export function MentionAutocomplete({
   return (
     <div
       ref={ref}
-      className="absolute bottom-full left-6 mb-1 z-50 w-72 overflow-hidden rounded-lg border border-border-strong bg-surface-3 shadow-lg"
+      className="w-72 overflow-hidden rounded-lg border border-border-strong bg-surface-3 shadow-lg"
     >
       <div className="border-b border-border px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-faint">
         Mention a note
