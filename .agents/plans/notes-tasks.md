@@ -143,6 +143,7 @@
   - Day-based view
   - Read-only activity log
   - Link to full notes
+  - **SUPERSEDED BY:** `editor-screen.md` TASK-E07 (more detailed spec)
 
 - [ ] **TASK-N28** Add "Promote to..." action menu
   - Context menu on note

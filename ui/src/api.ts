@@ -28,6 +28,22 @@ export interface WithId {
   [k: string]: unknown;
 }
 
+// Typed edges (core/src/node.rs EdgeType, snake_case) and the strategy node
+// types a note can be promoted to. Kept client-side for the editor's type
+// selector + edge picker; the server validates each.
+export const EDGE_TYPES = [
+  "supports", "contradicts", "derives_from", "assumes", "tests", "implements",
+  "blocks", "resolves", "requires", "validates", "weakens", "supersedes",
+  "claims_value_for", "scheduled_by", "reviewed_by", "created_from", "compares_with",
+] as const;
+
+export const NODE_TYPES = [
+  "note", "journal", "source", "source_chunk", "evidence_item", "strategy_case",
+  "strategic_claim", "assumption", "counterevidence", "option", "choice_cascade",
+  "strategy_bet", "experiment", "metric", "work_package", "timebox", "value_claim",
+  "open_question", "risk", "decision_record",
+] as const;
+
 export const api = {
   createCase: (title: string) =>
     call<WithId>("POST", "/api/cases", { title }),
@@ -105,4 +121,9 @@ export const api = {
     call<string[]>("GET", `/api/notes/${id}/placements`),
   promoteNote: (id: string, targetType: string) =>
     call<WithId>("POST", `/api/notes/${id}/promote`, { target_type: targetType }),
+  /** Add a typed edge `from(id) --edge_type--> to`. Gate-safe (structural only). */
+  linkNode: (id: string, to: string, edgeType: string) =>
+    call<{ linked: boolean; edge: string; to: string }>("POST", `/api/node/${id}/edge`, { to, edge_type: edgeType }),
+  /** Typed edges of a node (parsed from frontmatter by the server's get_node). */
+  edgeTypes: () => EDGE_TYPES,
 };

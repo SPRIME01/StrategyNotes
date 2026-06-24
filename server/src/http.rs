@@ -20,6 +20,7 @@ use strategynotes_adapters::{DaynoteEventSink, MarkdownVault, SQLiteIndex, Syste
 use strategynotes_core::evidence::{EvidenceKind, ProofLevel};
 use strategynotes_core::execution::{Completion, PomoEstimate};
 use strategynotes_core::node::NodeType;
+use strategynotes_core::node::EdgeType;
 use strategynotes_core::ports::{DerivedIndex, NodeVault};
 use strategynotes_core::naming::from_snake_case;
 use strategynotes_core::services::App;
@@ -67,6 +68,7 @@ pub async fn serve(data_dir: &Path, port: u16) -> Result<(), Box<dyn std::error:
         .route("/api/notes/:id/clone", post(clone_note))
         .route("/api/notes/:id/placements", get(note_placements))
         .route("/api/notes/:id/promote", post(promote_note))
+        .route("/api/node/:id/edge", post(link_node))
         .route("/api/cases", post(create_case).get(list_cases))
         .route("/api/sources", post(add_source))
         .route("/api/source-chunks", post(add_source_chunk))
@@ -212,6 +214,26 @@ async fn promote_note(
     let ty: NodeType = from_snake_case(&b.target_type)?;
     let node = st.app().promote_note(NodeId::parse(&id)?, ty)?;
     Ok(Json(serde_json::to_value(&node)?))
+}
+
+/// POST /api/node/:id/edge — add a typed edge `:id --edge_type--> to`.
+/// Gate-safe: only mutates structural edges in frontmatter (INV-EDGE); it does
+/// NOT accept evidence, approve bets, or otherwise change gated state — those
+/// still require their dedicated gate endpoints (INV-HUMAN, SDS-GATE).
+#[derive(Deserialize)]
+struct LinkBody {
+    to: String,
+    edge_type: String,
+}
+
+async fn link_node(
+    State(st): State<Arc<ServerState>>,
+    AxumPath(id): AxumPath<String>,
+    Json(b): Json<LinkBody>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let et: EdgeType = from_snake_case(&b.edge_type)?;
+    st.app().link(NodeId::parse(&id)?, NodeId::parse(&b.to)?, et)?;
+    Ok(Json(serde_json::json!({ "linked": true, "edge": b.edge_type, "to": b.to })))
 }
 
 #[derive(Deserialize)]

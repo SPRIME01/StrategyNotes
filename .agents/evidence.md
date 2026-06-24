@@ -834,3 +834,151 @@ Evidence types: EV-TST (126), EV-LINT (clippy -D warnings clean), EV-SKIP
 (Tauri build/run, live-provider smoke).
 
 Status: Accepted
+
+---
+
+## EV-014 — Editor screen (3-panel editor + journal + blocks + shortcuts)
+
+Date: 2026-06-23
+Slice: editor-screen.md / editor-tasks.md (TASK-E01..E16, E18 responsive)
+Agent: main (this session)
+Spec IDs: PRD-012 (atomic UI), PRD-001 (markdown node graph), SDS-UI (editor screen)
+
+Implemented (per .agents/plans/editor-screen.md):
+- E01 EditorLayout — 3-panel container (sidebar | editor | contextPanel), responsive
+  collapse (sidebar → drawer < 768px, context hidden < 1024px), persisted open state.
+- E02 EditorHeader — clickable breadcrumb, journal date display, save indicator, Share/More.
+- E03 NoteEditor — textarea editing surface reusing existing [[/# autocomplete, adds
+  `/` command + `@` mention triggers, 1s debounced autosave. (CodeMirror is TASK-N19/N20,
+  not done — ponytail ceiling documented in-file.)
+- E04 ContextPanel — collapsible, composes Linked / Quick Actions / Core Concepts.
+- E05 NewPageButton + extracted Sidebar (shared by App + EditorLayout).
+- E06 JournalDateNav — ordinal date display, prev/next, native <input type=date> picker,
+  dot indicators for days with entries.
+- E07 JournalView — date-based editor (supersedes TASK-N25 activity-log view).
+- E08 journal auto-creation + template on empty date.
+- E10 CommandPalette — `/` trigger, fuzzy filter, keyboard nav.
+- E11 MentionAutocomplete — `@` trigger, inserts [[Title]].
+- E12 CalloutBlock — tip/warn/info + parseCallout syntax helper.
+- E13-E15 LinkedSection (backlinks), QuickActionsSection, CoreConceptsSection.
+- E16 useKeyboardShortcuts — global registry (Cmd+N new, Cmd+J journal, ? help),
+  conflict detection; Cmd+\ handled in EditorLayout.
+- E18 responsive layout (mobile drawer, context hide).
+
+Integration: App.tsx routes notes/journal to the new screens; other views keep the
+existing inline layout via the shared Sidebar. useNotes hook centralizes load/create/
+save/patch so live edits don't hit the API per keystroke (debounced save).
+
+Commands run:
+```bash
+pnpm -C ui typecheck   # tsc --noEmit — clean
+pnpm -C ui test        # vitest run
+pnpm -C ui build       # tsc --noEmit && vite build
+pnpm -C ui dev         # vite dev — HTTP 200, no console errors
+```
+
+Result:
+```text
+### pnpm -C ui typecheck
+(no output — exit 0)
+
+### pnpm -C ui test
+ ✓ src/components/editor/editor.test.ts (12 tests)
+ ✓ src/components/editor/NoteEditor.test.tsx (3 tests)
+ ✓ src/components/editor/CommandPalette.test.tsx (3 tests)
+ ✓ src/App.test.tsx (1 test)
+ Test Files  4 passed (4)
+      Tests  19 passed (19)
+
+### pnpm -C ui build
+ ✓ 1807 modules transformed.
+ dist/assets/index-BEUb-V_I.js  237.59 kB │ gzip: 72.97 kB
+ ✓ built in 5.28s
+
+### pnpm -C ui dev (smoke)
+ HTTP 200 on / ; VITE v5.4.21 ready, no errors
+```
+
+Evidence types: EV-TST (19 passing), EV-TYP (tsc clean), EV-BLD (vite build ok),
+EV-SMOKE (dev server 200).
+
+Deferred (out of scope / lower priority):
+- E09 Cmd+J wired (navigate to today) — present but does not force-create today's entry
+  beyond the existing auto-creation effect.
+- E17 loading/saving states — save indicator present in header; skeleton/error toast
+  not yet distinct (saveState surfaces "saving/saved/error" text).
+- CodeMirror (TASK-N19/N20) — textarea ceiling; callout widgets + live decorations
+  deferred until then.
+
+Status: Accepted
+
+---
+
+## EV-015 — Graph unification: markdown is source of truth, everything else generated
+
+Date: 2026-06-23
+Slice: graph-unification.md (GU-01..GU-17)
+Agent: main (this session)
+Spec IDs: PRD-002, PRD-003, PRD-012, SDS-NODE, SDS-GRAPH, INV-DUR, INV-PORT,
+INV-EDGE, INV-EVID, INV-CONTRA, INV-HUMAN; RISK-001 mitigation.
+
+Thesis delivered: the app is now a projection engine over the markdown vault
+(the Logseq/Obsidian model, strategy-native). Every screen is a generated view
+over typed nodes; zero MOCK_* data remains.
+
+Part 1 — unify the graph (no backend change):
+- GU-01/02: `lib/node.ts` field accessors + `useTypedNodes`/`useNode` hooks
+  (resolve IDs → typed GraphNodes via getNode).
+- GU-03..10: EvidenceInbox, BetBoard, VrdView, WorkPlanner, ExecutionRunbook,
+  AgentDraftInbox, CaseCockpit (projection over case+evidence+bets+timeboxes),
+  TraceExplorer (api.trace) — all API-driven with honest empty states.
+- GU-11: all MOCK_* constants + dead type aliases removed from App.tsx.
+
+Part 2 — editor as OKF concept-doc author (strategy-native teeth):
+- GU-12: TypeSelector (promote note → typed node via existing /promote).
+- GU-13: EdgeLinker — typed-edge creation via NEW gate-safe route
+  POST /api/node/:id/edge (structural edges only; acceptance/approval still
+  require their gate endpoints — INV-HUMAN/SDS-GATE preserved).
+- GU-14: ProofBurdenPanel (SPEC §11.4) replaces static Core Concepts; reads
+  typed edges from frontmatter, answers the 5 burden-of-proof questions.
+- GU-15: citations = supports/created_from edges (same mechanism).
+
+Part 3 — generated documents: GU-16 ErdView (living view over accepted
+evidence; OKF index.md style; not a static file).
+
+Part 4 — OKF export: GU-17 `lib/okf.ts` + Share button build a conformant
+OKF v0.1 bundle (concepts with required `type` frontmatter, synthesized
+index.md, log.md from daynotes); unknown keys + `edges` extension preserved.
+
+Backend: one new route + handler (server/src/http.rs link_node) wrapping the
+existing, tested core::services::link. Builds; cargo build -p strategynotes-server ok.
+
+Commands run:
+```bash
+pnpm -C ui typecheck   # clean
+pnpm -C ui test        # 34 passing (7 files)
+pnpm -C ui build       # 1812 modules, built ok
+cargo build -p strategynotes-server   # ok
+# end-to-end (server on 8795, fresh derived index):
+curl POST /api/notes (x2) -> A,B
+curl POST /api/node/A/edge {to:B, edge_type:supports} -> {"linked":true}
+curl GET  /api/node/A     -> frontmatter.edges=[{to:B,type:supports,status:active}]
+curl POST /api/notes/A/promote {target_type:evidence_item} -> typed node
+curl GET  /api/nodes/evidence_item -> [promoted A]   # appears in Evidence Inbox
+curl GET  /api/trace/A -> {reachable:[B,A]}          # Trace Explorer walks edge
+```
+
+Result: editor authors a note → promotes to evidence_item → flows into the
+Evidence Inbox → linked via typed edge → traceable. One graph, many lenses.
+Markdown vault is the only truth; SQLite is a rebuildable derived cache.
+
+Evidence types: EV-TST (34), EV-TYP, EV-BLD, EV-SMOKE (e2e HTTP), EV-CT (cargo).
+
+Known issue surfaced (pre-existing, not introduced here): a stale derived
+`index.db` from an older schema crashes the server on startup
+(`no such column: title` in idx_nodes_title) because CREATE TABLE IF NOT EXISTS
+skips migration. Wiping index.db (derived; INV-DUR-safe) restores startup.
+Proper fix = schema-version/migrate-on-open in sqlite_index.rs. Recorded as a
+follow-up; not in this slice's scope.
+
+Status: Accepted

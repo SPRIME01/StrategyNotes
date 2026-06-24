@@ -51,3 +51,35 @@ Decision: A clone is a typed edge `parent --places--> child` (new `Places` edge
   Cycle detection traverses the Places subgraph. Implemented in Phase 4 slice
   S-CLONE-001 (`core/src/graph.rs`). SPEC sec 4.3 updated to record the decision.
   Unblocked INV-CLONE.
+
+### OQ-011 — Stale derived index.db crashes server on startup (schema migration)
+
+Status: Open
+Affected: SDS-INDEX, INV-DUR, INV-PORT
+Surface: graph-unification slice (EV-015)
+
+Description:
+`adapters/src/sqlite_index.rs` creates `nodes(... title ...)` and
+`CREATE INDEX idx_nodes_title ON nodes(title)` in one batch. If an existing
+`index.db` was created by an older schema (no `title` column on `nodes`),
+`CREATE TABLE IF NOT EXISTS` is a no-op (table already exists) and the index
+creation fails with `no such column: title`, crashing the HTTP server on
+startup. Observed 2026-06-23 when running `serve` against a pre-existing
+strategynotes-data/index.db.
+
+Why it matters:
+The markdown vault is the source of truth and is intact; SQLite is a derived
+cache. A stale cache must NEVER block startup — the correct behavior is to
+rebuild (INV-DUR: "deleting SQLite must never lose user data"; the rebuild is
+the INV-DUR smoke test). Today it blocks instead of rebuilding.
+
+Recommended fix:
+Schema-version the derived index (a `schema_version` pragma/key); on open, if
+the on-disk version mismatches the expected one, DROP and rebuild from the
+vault (which `rebuild(&vault)` already does). This makes "wipe SQLite, rebuild
+from markdown" automatic instead of a manual `rm index.db`.
+
+Workaround (current): delete `strategynotes-data/index.db`; it is regenerated
+on next server start. Verified safe — vault markdown is untouched.
+
+Owner: Sam / Storage
