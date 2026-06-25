@@ -50,3 +50,6 @@ src-tauri/target/
 src-tauri/gen/
 
 .tmp/
+
+# dev server runtime (pids/logs)
+.run/
