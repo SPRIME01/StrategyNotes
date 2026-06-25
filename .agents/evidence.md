@@ -1199,3 +1199,39 @@ pnpm -C ui build       # 1840 modules, ok
 #   GET /api/nodes/ord -> [node]; fields resolve → ORD doc renders real data.
 
 Status: Accepted
+
+---
+
+## EV-021 — OKF import + case-scoping
+
+Date: 2026-06-23
+Agent: main (this session)
+Spec IDs: INV-PORT, INV-HUMAN, PRD-009..014, SDS-NODE.
+
+OKF import (inverse of export):
+- core: services::create_node + format::frontmatter_from_yaml_str (YAML parsing
+  stays in core per the hexagonal rule).
+- server: POST /api/node — create a typed node from frontmatter yaml + body.
+  Gate-safe: `type`/`status` stripped from frontmatter (type→ty, status gate-
+  owned); unknown types → Note.
+- ui: api.createNode; lib/okf splitConcepts/parseConceptFile/isReservedOkfName
+  (9 tests); NotesScreen Import button (multi-file .md picker).
+- e2e: import evidence_item concept → type+proof preserved, status stripped,
+  appears in nodesByType.
+
+Case-scoping:
+- CaseSelector (topbar) picks a strategy_case; App holds caseId.
+- DocSectionSpec.caseField: a section scoped via a frontmatter case key. ORD +
+  EDS declare caseField:"case"; SLD/ERD/VSD stay workspace-wide (those node
+  types have no direct `case` field — edge-based scoping is a follow-on).
+- GeneratedDoc/DocSection filters by caseField when a case is selected; Cockpit
+  honors the selected case (fallback: first). GeneratedDoc test proves the
+  case-filter (in-case shown, other-case hidden).
+
+Verification:
+pnpm -C ui typecheck   # clean
+pnpm -C ui test        # 60 passing (11 files)
+pnpm -C ui build       # 1841 modules, ok
+e2e POST /api/node     # gate-safe import (status stripped)
+
+Status: Accepted

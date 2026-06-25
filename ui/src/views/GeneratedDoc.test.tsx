@@ -6,6 +6,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { GeneratedDoc } from "./GeneratedDoc";
 import type { DocSpec } from "./GeneratedDoc";
+import { api } from "../api";
 
 const accepted = { id: "01J..EV1", type: "evidence_item", frontmatter: { text: "speed is key", proof_level: "Observed", status: "Accepted", source_chunk: "01J..SC1" }, body: "" };
 const drafted = { id: "01J..EV2", type: "evidence_item", frontmatter: { text: "maybe churn", proof_level: "Hypothesized", status: "Drafted" }, body: "" };
@@ -39,5 +40,21 @@ describe("GeneratedDoc", () => {
     expect(screen.queryByText("maybe churn")).toBeNull();
     // section count reflects filtered set
     expect(screen.getByText("1")).toBeTruthy();
+  });
+
+  it("case-scopes a section that declares a caseField", async () => {
+    const inCase = { id: "01J..O1", type: "ord", frontmatter: { statement: "in-case outcome", case: "01J..CASE" }, body: "" };
+    const other = { id: "01J..O2", type: "ord", frontmatter: { statement: "other-case outcome", case: "01J..OTHER" }, body: "" };
+    vi.mocked(api.nodesByType).mockResolvedValueOnce(["01J..O1", "01J..O2"]);
+    vi.mocked(api.getNode).mockImplementation((id: string) =>
+      Promise.resolve(id.endsWith("O1") ? inCase : other),
+    );
+    const spec: DocSpec = {
+      id: "ord", title: "ORD", kicker: "O", intro: "t",
+      sections: [{ label: "Outcome Requirements", nodeType: "ord", caseField: "case" }],
+    };
+    render(<GeneratedDoc spec={spec} caseId="01J..CASE" />);
+    await waitFor(() => expect(screen.getByText("in-case outcome")).toBeTruthy());
+    expect(screen.queryByText("other-case outcome")).toBeNull();
   });
 });

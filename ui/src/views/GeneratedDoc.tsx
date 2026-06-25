@@ -22,6 +22,9 @@ export interface DocSectionSpec {
   nodeType: string;
   fields?: FieldSpec[];
   filter?: (n: GraphNode) => boolean;
+  /** Frontmatter key holding the owning case id; when set + a caseId is active,
+   *  the section is scoped to that case. */
+  caseField?: string;
   emptyHint?: string;
   /** Show proof_level / status badges if present on the node. */
   badges?: boolean;
@@ -35,7 +38,8 @@ export interface DocSpec {
   sections: DocSectionSpec[];
 }
 
-export function GeneratedDoc({ spec }: { spec: DocSpec }) {
+export function GeneratedDoc({ spec, caseId }: { spec: DocSpec; caseId?: string | null }) {
+  const scoped = caseId ? `${spec.title} · scoped to selected case where the type carries a \`case\` field` : spec.intro;
   return (
     <div>
       <div className="mb-5">
@@ -43,18 +47,23 @@ export function GeneratedDoc({ spec }: { spec: DocSpec }) {
           {spec.kicker} · GENERATED
         </div>
         <h1 className="text-2xl font-normal tracking-tight" style={{ fontFamily: "var(--font-display)" }}>{spec.title}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{spec.intro}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{scoped}</p>
       </div>
       <div className="flex flex-col gap-5">
-        {spec.sections.map((s) => <DocSection key={s.label} spec={s} />)}
+        {spec.sections.map((s) => <DocSection key={s.label} spec={s} caseId={caseId} />)}
       </div>
     </div>
   );
 }
 
-function DocSection({ spec }: { spec: DocSectionSpec }) {
+function DocSection({ spec, caseId }: { spec: DocSectionSpec; caseId?: string | null }) {
   const { nodes, loading } = useTypedNodes(spec.nodeType);
-  const filtered = spec.filter ? nodes.filter(spec.filter) : nodes;
+  const filtered = nodes.filter((n) => {
+    if (spec.filter && !spec.filter(n)) return false;
+    // Case-scoping: only where the section declares a caseField.
+    if (caseId && spec.caseField && fmString(n, spec.caseField) !== caseId) return false;
+    return true;
+  });
 
   return (
     <section>

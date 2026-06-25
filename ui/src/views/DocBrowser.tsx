@@ -7,7 +7,7 @@ import { GeneratedDoc } from "./GeneratedDoc";
 import { DOC_SPECS } from "./docSpecs";
 import { cn } from "../lib/utils";
 
-export function DocBrowser() {
+export function DocBrowser({ caseId }: { caseId?: string | null }) {
   const [activeId, setActiveId] = useState(DOC_SPECS[0].id);
   const active = DOC_SPECS.find((d) => d.id === activeId) ?? DOC_SPECS[0];
 
@@ -30,7 +30,7 @@ export function DocBrowser() {
           </button>
         ))}
       </div>
-      <GeneratedDoc spec={active} />
+      <GeneratedDoc spec={active} caseId={caseId} />
     </div>
   );
 }

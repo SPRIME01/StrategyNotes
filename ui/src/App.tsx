@@ -8,6 +8,7 @@ import {
 } from "./atoms";
 import { api, type GateResult } from "./api";
 import { Sidebar, type ViewId } from "./components/layout/Sidebar";
+import { CaseSelector } from "./components/layout/CaseSelector";
 import { NotesScreen } from "./views/NotesScreen";
 import { JournalView } from "./views/JournalView";
 import { DocBrowser } from "./views/DocBrowser";
@@ -24,6 +25,7 @@ const POMOS_AVAILABLE = 24; // ponytail: per-cycle capacity budget; make configu
 export function App() {
   const [view, setView] = useState<ViewId>("cockpit");
   const [pendingNoteId, setPendingNoteId] = useState<string | null>(null);
+  const [caseId, setCaseId] = useState<string | null>(null);
 
   const { helpOpen, setHelpOpen, shortcuts } = useKeyboardShortcuts([
     {
@@ -59,14 +61,15 @@ export function App() {
           <div className="flex flex-1 items-center gap-2 text-sm text-muted-foreground">
             <span className="text-muted-ink">markdown is the source of truth — everything else is generated</span>
           </div>
+          <CaseSelector caseId={caseId} onChange={setCaseId} />
           <CapacityMeter committed={0} available={POMOS_AVAILABLE} />
         </header>
 
         <main className="flex-1 overflow-y-auto p-6">
           <div className="mx-auto max-w-[1340px]">
-            {view === "cockpit" && <CaseCockpit />}
+            {view === "cockpit" && <CaseCockpit caseId={caseId} />}
             {view === "evidence" && <EvidenceInbox />}
-            {view === "docs" && <DocBrowser />}
+            {view === "docs" && <DocBrowser caseId={caseId} />}
             {view === "bets" && <BetBoard />}
             {view === "trace" && <TraceExplorer />}
             {view === "work" && <WorkPlanner />}
@@ -130,14 +133,15 @@ function EmptyState({ noun, hint }: { noun: string; hint?: string }) {
 const STAGES = ["establish_reality", "define_outcomes", "develop_logic", "choose_and_bet", "design_execution", "validate", "realize_value", "review"];
 const ARTIFACT_TYPES = ["erd", "ord", "sld", "eds", "vsd", "vrd"] as const;
 
-function CaseCockpit() {
+function CaseCockpit({ caseId }: { caseId?: string | null }) {
   const cases = useTypedNodes("strategy_case");
   const evidence = useTypedNodes("evidence_item");
   const claims = useTypedNodes("strategic_claim");
   const bets = useTypedNodes("strategy_bet");
   const timeboxes = useTypedNodes("timebox");
 
-  const c = cases.nodes[0];
+  // Honor the selected case; fall back to the first case (workspace default).
+  const c = (caseId ? cases.nodes.find((n) => n.id === caseId) : null) ?? cases.nodes[0];
   const stageIdx = c ? Math.max(0, STAGES.indexOf(fmString(c, "phase"))) : -1;
 
   const draftedEvidence = evidence.nodes.filter((e) => fmString(e, "status").toLowerCase() !== "accepted").length;
