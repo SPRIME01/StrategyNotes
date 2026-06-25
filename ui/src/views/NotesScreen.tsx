@@ -153,6 +153,14 @@ export function NotesScreen({
                 onTitleChange={(title) => store.patch(active.id, active.body ?? "", title)}
                 onSave={(body) => store.save(active.id, body)}
                 onPromote={(newId) => { setActiveId(newId); store.reload(); }}
+                onOpenNote={(t) => {
+                  const found = store.notes.find((n) => fmString(n, "title").toLowerCase() === t.toLowerCase() || n.id === t);
+                  if (found) setActiveId(found.id);
+                }}
+                onPromoteBlock={async (title, body) => {
+                  const n = await store.create(title, body);
+                  return n?.id ?? null;
+                }}
                 searchNotes={async (q) =>
                   mentionCandidates.filter((m) => m.title.toLowerCase().includes(q.toLowerCase()))
                 }

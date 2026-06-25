@@ -16,6 +16,7 @@ import { MentionAutocomplete, type MentionResult } from "./MentionAutocomplete";
 import { TypeSelector } from "./TypeSelector";
 import type { EditorSurface, CursorInfo } from "../../editor/port";
 import { CodeMirrorSurface } from "../../editor/adapters/CodeMirrorSurface";
+import { blockAtCursor, deriveBlockTitle, promoteBlockEdit } from "../../editor/block";
 import type { SaveState } from "./EditorHeader";
 import { fmString, type GraphNode } from "../../lib/node";
 
@@ -51,6 +52,8 @@ export interface NoteEditorProps {
   onPromote?: (newId: string, type: string) => void;
   /** Open a note when a [[link]]/((ref)) chip is clicked (meaning stays outside the surface). */
   onOpenNote?: (titleOrId: string) => void;
+  /** Block-as-node (PRD-002): mint a node from a block; return its ULID. */
+  onPromoteBlock?: (title: string, body: string) => Promise<string | null>;
   saveState?: SaveState;
   /** Editor surface port (default: CodeMirror). Inject to swap the engine. */
   Surface?: EditorSurface;
@@ -71,6 +74,7 @@ export function NoteEditor({
   onMentionInsert,
   onPromote,
   onOpenNote,
+  onPromoteBlock,
   saveState = "idle",
   Surface = CodeMirrorSurface,
   searchNotes,
@@ -113,16 +117,36 @@ export function NoteEditor({
 
   // ── command: insert markdown prefix at the trigger's line start ──
   const applyCommand = (cmd: BlockCommand) => {
+    if (cmd.action === "promote-block") { void promoteBlock(); return; }
     if (!trigger) return;
     const before = draft.slice(0, trigger.startPos);
     const after = draft.slice(trigger.startPos + trigger.partial.length);
     // Replace the whole `/...` token with the command's insert + a newline cursor.
-    const insert = cmd.insert;
+    const insert = cmd.insert ?? "";
     const next = before.slice(0, before.length - trigger.partial.length - 1) + insert + after;
     setDraft(next);
     onChange?.(next);
     scheduleSave(next);
     closeTrigger();
+  };
+
+  // ── block-as-node (PRD-002): promote the current block to a first-class node ──
+  // Mint a node via the parent, then transclude it in-place as ((ULID)). The
+  // reference is canonical markdown → backlinks + address come for free.
+  const promoteBlock = async () => {
+    closeTrigger();
+    if (!onPromoteBlock) return;
+    const pos = cursorRef.current?.pos ?? draft.length;
+    const title = deriveBlockTitle(draft, pos);
+    const body = blockAtCursor(draft, pos).content;
+    if (!body) return;
+    const id = await onPromoteBlock(title, body);
+    if (!id) return;
+    const next = promoteBlockEdit(draft, pos, id);
+    if (next == null) return;
+    setDraft(next);
+    onChange?.(next);
+    scheduleSave(next);
   };
 
   // ── wikilink/tag: replace the partial token ──

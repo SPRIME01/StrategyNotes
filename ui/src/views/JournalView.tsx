@@ -76,6 +76,8 @@ export function JournalView({ onSelectView }: { onSelectView: (id: ViewId) => vo
               onChange={(body) => store.patch(note.id, body)}
               onTitleChange={() => {/* journal titles are date-derived; keep read-only feel */}}
               onSave={(body) => store.save(note.id, body)}
+              onPromoteBlock={async (title, body) => { const n = await store.create(title, body); return n?.id ?? null; }}
+              onOpenNote={() => onSelectView("notes")}
               saveState={store.saveState}
               placeholder="Capture today's thinking…"
             />

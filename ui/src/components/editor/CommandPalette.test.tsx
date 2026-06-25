@@ -26,4 +26,9 @@ describe("CommandPalette", () => {
     render(<CommandPalette query="zzz" onSelect={() => {}} onClose={() => {}} />);
     expect(screen.getByText(/No matching block/)).toBeTruthy();
   });
+
+  it("exposes the block-as-node promote command (action, not insert)", () => {
+    render(<CommandPalette query="node" onSelect={() => {}} onClose={() => {}} />);
+    expect(screen.getByText("Node (promote block)")).toBeTruthy();
+  });
 });

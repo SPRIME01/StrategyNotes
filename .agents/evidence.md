@@ -1084,3 +1084,42 @@ widgets (currently non-destructive marks); hover preview cards; clones UX.
 All build on this port; none touch NoteEditor's dependency on it.
 
 Status: Accepted
+
+---
+
+## EV-018 — Block-as-node (PRD-002) on the editor port
+
+Date: 2026-06-23
+Slice: gap-traces.md (block-as-node)
+Agent: main (this session)
+Spec IDs: PRD-002 (every outline item is a first-class node), INV-EDGE, INV-PORT.
+
+An outline item can now be promoted to a first-class node, referenced by a
+canonical `((ULID))` transclusion — no hidden editor model, markdown stays
+source of truth.
+
+- `ui/src/editor/block.ts` — ADAPTER-NEUTRAL pure helpers (7 tests):
+  blockAtCursor, promoteBlockEdit (replaces block with `((id))` keeping the
+  list/quote marker), deriveBlockTitle, blockRef, isBlockRef.
+- CommandPalette: new `/node` command (action: "promote-block", no insert).
+- NoteEditor: applyCommand routes the action → promoteBlock(): mints a node via
+  onPromoteBlock(title, body), then transcludes `((id))` in place. The tok-ref
+  decoration already renders the ref as a clickable chip → onOpenNote.
+- NotesScreen / JournalView wire onPromoteBlock → store.create.
+
+First-class guarantees (backend, unchanged): core/src/body.rs parses
+`((block_ref))` → BodyRefKind::BlockRef → indexed body_refs → backlinks +
+address. So a promoted block has its own page, body, and backlinks.
+
+Verification:
+pnpm -C ui typecheck   # clean
+pnpm -C ui test        # 51 passing (10 files)
+pnpm -C ui build       # 1835 modules, ok
+# e2e (server 8799): create block-node B; parent body "- ((B)) plan";
+#   GET /api/notes/B/backlinks -> ["A"]   (B has a backlink from its parent)
+
+Deferred: auto-ULID-per-block (Logseq-style; currently opt-in via /node);
+rendered transclusion (show the node's content inline rather than a chip);
+clone placements UI (Places edges).
+
+Status: Accepted

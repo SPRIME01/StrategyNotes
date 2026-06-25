@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Type, Heading1, Heading2, List, ListOrdered, CheckSquare, Quote, Code, Minus, Lightbulb, AlertTriangle,
+  Type, Heading1, Heading2, List, ListOrdered, CheckSquare, Quote, Code, Minus, Lightbulb, AlertTriangle, Box,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 
@@ -16,8 +16,10 @@ export interface BlockCommand {
   icon: typeof Type;
   shortcut?: string;
   description?: string;
-  /** Markdown to insert at the line start. */
-  insert: string;
+  /** Markdown to insert at the line start (mutually exclusive with `action`). */
+  insert?: string;
+  /** Action command: run a handler instead of inserting text. */
+  action?: "promote-block";
 }
 
 export const BLOCK_COMMANDS: BlockCommand[] = [
@@ -32,6 +34,7 @@ export const BLOCK_COMMANDS: BlockCommand[] = [
   { id: "divider", label: "Divider", icon: Minus, shortcut: "---", insert: "\n---\n" },
   { id: "tip", label: "Tip Callout", icon: Lightbulb, insert: "> [!tip] \n" },
   { id: "warn", label: "Warning Callout", icon: AlertTriangle, insert: "> [!warn] \n" },
+  { id: "node", label: "Node (promote block)", icon: Box, description: "Make this block a first-class node (PRD-002)", action: "promote-block" },
 ];
 
 export function CommandPalette({
