@@ -190,19 +190,29 @@ Then create a new strategy case or open an existing StrategyNotes workspace.
 ## Developer quickstart
 
 ```bash
-# Tests (the conformance gate — 107 tests, 0 failures)
+# Dev servers: backend (markdown-vault HTTP on :8787) + frontend (Vite on :5173).
+# Frontend hot-reloads via Vite HMR; backend hot-reloads on *.rs change
+# (rebuild + restart). Logs in .run/*.log.
+just dev-up      # → open http://localhost:5173
+just dev-logs    # tail both logs
+just dev-down    # stop both, clean up .run/
+
+# Tests (the conformance gate)
 cargo test --workspace && pnpm -C ui test
+
+# Lint / typecheck (strict — must be clean)
+cargo clippy --workspace --all-targets -- -D warnings
+pnpm -C ui typecheck
 
 # Run the spine end-to-end as a CLI demo (proves every gate fires)
 cargo run -p strategynotes-server -- /tmp/sn
-
-# Run the HTTP API + React UI
-cargo run -p strategynotes-server -- serve /tmp/sn 8787 &
-pnpm -C ui dev    # UI at http://localhost:5173 (proxies /api -> 8787)
-
-# Lint (strict — must be clean)
-cargo clippy --workspace --all-targets -- -D warnings
 ```
+
+`just dev-up` runs detached: the backend watcher rebuilds and restarts the
+server whenever a `.rs` file in `core/`/`adapters/`/`server/` changes (it tracks
+the server PID, so a build error just waits for the next save — it won't crash).
+The first start does a one-time `cargo build`; subsequent reloads are incremental
+(~4s for a core change). If a port is busy, `just dev-down` then retry.
 
 ### Desktop (Tauri)
 The `src-tauri/` shell wraps the React UI and spawns the local backend. It

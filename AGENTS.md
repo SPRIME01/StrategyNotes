@@ -253,15 +253,30 @@ Plus PLAN §1 pre-seeds OQ-006..010 (node grouping, plan/exec UX boundary, edit 
 
 ## 9. Commands
 
-**Phase 0 not yet scaffolded — no build/test/typecheck commands exist.** Once Phase 0 lands, this section is the canonical command list every agent must use. Placeholders:
+Canonical command list. **Dev loop uses `just`** (`justfile` at repo root); build/test/lint are the verification gates.
 
 ```
+# ── dev loop ──
+just dev-up      # backend (markdown-vault HTTP :8787) + frontend (Vite :5173), detached
+just dev-down    # stop both, clean up .run/
+just dev-logs    # tail .run/{backend,ui}.log
+
+# ── verification gates (run before claiming any slice done) ──
 build:      cargo build --workspace && pnpm -C ui build
 test:       cargo test --workspace && pnpm -C ui test
 typecheck:  cargo check --workspace && pnpm -C ui typecheck
-lint:       (Phase 1+) cargo clippy --workspace && pnpm -C ui lint
-rebuild:    (Phase 3) wipe SQLite, rebuild from markdown — INV-DUR smoke test
+lint:       cargo clippy --workspace --all-targets -- -D warnings && pnpm -C ui lint
+rebuild:    wipe SQLite, rebuild from markdown — INV-DUR smoke test
+            (rm strategynotes-data/index.db; it regenerates on next server start)
 ```
+
+`just dev-up` hot-reloads: Vite HMR for the UI; a dependency-free bash watcher
+rebuilds + restarts the Rust server on any `*.rs` change in `core/`/`adapters/`/
+`server/`. It tracks the server by PID (never `pkill -f` — that would match the
+watcher's own command line and suicide). Servers run detached via `setsid` with
+PIDs in `.run/` (gitignored). Backend first start = one `cargo build`; later
+reloads are incremental (~4s for a core change). A failed build is logged and
+waits for the next save — the watcher stays up.
 
 ---
 
