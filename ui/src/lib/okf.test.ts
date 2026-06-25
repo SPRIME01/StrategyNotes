@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { nodeToConcept, exportOkfBundle, synthesizeIndex } from "./okf";
+import { nodeToConcept, exportOkfBundle, synthesizeIndex, parseConceptFile, splitConcepts, isReservedOkfName } from "./okf";
 import type { GraphNode } from "./node";
 
 function ev(id: string, text: string, extra: Record<string, unknown> = {}): GraphNode {
@@ -42,5 +42,37 @@ describe("OKF export", () => {
     expect(bundle).toContain("# Case");
     expect(bundle).toContain("type: evidence_item");
     expect(bundle).toContain("Directory Update Log");
+  });
+});
+
+describe("OKF import parsing", () => {
+  it("parses a concept doc into type + frontmatter yaml + body", () => {
+    const text = "---\ntype: evidence_item\nproof_level: Observed\ntitle: Speed\n---\n\nSpeed is key.\n";
+    const c = parseConceptFile(text)!;
+    expect(c.type).toBe("evidence_item");
+    expect(c.frontmatterYaml).toContain("proof_level: Observed");
+    expect(c.body.trim()).toBe("Speed is key.");
+  });
+
+  it("defaults to note when frontmatter is absent", () => {
+    const c = parseConceptFile("just body text")!;
+    expect(c.type).toBe("note");
+    expect(c.body).toBe("just body text");
+  });
+
+  it("splits a concatenated bundle (round-trip) into multiple concepts", () => {
+    const bundle = [
+      "---\ntype: note\ntitle: A\n---\nbody-a",
+      "---\ntype: evidence_item\ntitle: B\n---\nbody-b",
+    ].join("\n\n");
+    const concepts = splitConcepts(bundle);
+    expect(concepts).toHaveLength(2);
+    expect(concepts.map((c) => c.type)).toEqual(["note", "evidence_item"]);
+  });
+
+  it("detects reserved OKF filenames", () => {
+    expect(isReservedOkfName("index.md")).toBe(true);
+    expect(isReservedOkfName("log.md")).toBe(true);
+    expect(isReservedOkfName("tables/orders.md")).toBe(false);
   });
 });

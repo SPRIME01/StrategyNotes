@@ -3,7 +3,7 @@
 // right. Replaces the inline NotesView from App.tsx with the proper 3-panel
 // editor structure from editor-screen.md.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, Trash2 } from "lucide-react";
 import { Sidebar, type ViewId } from "../components/layout/Sidebar";
 import { EditorLayout } from "./EditorLayout";
@@ -13,7 +13,7 @@ import { ContextPanel } from "../components/editor/ContextPanel";
 import { Badge } from "../components/ui/badge";
 import { cn } from "../lib/utils";
 import { fmString, type GraphNode } from "../lib/node";
-import { exportOkfBundle } from "../lib/okf";
+import { exportOkfBundle, splitConcepts, isReservedOkfName } from "../lib/okf";
 import { api } from "../api";
 import { useNotes } from "../hooks/useNotes";
 import type { MentionResult } from "../components/editor/MentionAutocomplete";
@@ -54,6 +54,25 @@ export function NotesScreen({
   const store = useNotes();
   const [query, setQuery] = useState("");
   const [activeId, setActiveId] = useState<string | null>(initialNoteId ?? null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Import OKF concept files: parse each → create typed nodes (gate-safe;
+  // status stripped server-side). Reserved names (index.md/log.md) skipped.
+  const importOkf = async (files: FileList) => {
+    let count = 0;
+    for (const file of Array.from(files)) {
+      if (isReservedOkfName(file.name)) continue;
+      const text = await file.text();
+      for (const c of splitConcepts(text)) {
+        try {
+          await api.createNode({ type: c.type, frontmatter_yaml: c.frontmatterYaml, body: c.body });
+          count++;
+        } catch { /* skip on error, keep going */ }
+      }
+    }
+    await store.reload();
+    if (count > 0) alert(`Imported ${count} concept${count > 1 ? "s" : ""} from OKF.`);
+  };
 
   const active = useMemo(
     () => store.notes.find((n) => n.id === activeId) ?? null,
@@ -123,6 +142,21 @@ export function NotesScreen({
                   className="w-full rounded-md border bg-surface-2 py-1.5 pl-7 pr-2 text-sm outline-none focus:border-primary"
                 />
               </div>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="shrink-0 rounded-md border px-2 py-1.5 text-xs text-muted-foreground hover:bg-secondary"
+                title="Import OKF concept files (.md)"
+              >
+                Import
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".md,text/markdown"
+                multiple
+                className="hidden"
+                onChange={(e) => { if (e.target.files?.length) void importOkf(e.target.files); e.target.value = ""; }}
+              />
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
               {store.loading && <p className="px-2 py-3 text-sm text-muted-ink">Loading…</p>}

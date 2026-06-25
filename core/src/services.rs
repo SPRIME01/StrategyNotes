@@ -65,6 +65,26 @@ impl<'a> App<'a> {
         Ok(node)
     }
 
+    /// Create a typed node from imported frontmatter + body (OKF import + the
+    /// create counterpart to gate-safe `update_node`). `type` and `status` are
+    /// stripped from the supplied frontmatter: `type` is the Node's
+    /// discriminator (the `ty` arg), `status` is gate-owned. Unknown keys are
+    /// preserved (INV-PORT).
+    pub fn create_node(
+        &self,
+        ty: NodeType,
+        mut frontmatter: crate::node::Frontmatter,
+        body: String,
+    ) -> Result<Node, Error> {
+        frontmatter.remove("type");
+        frontmatter.remove("status");
+        let id = self.minter.mint();
+        let node = Node { id, ty, frontmatter, body };
+        self.vault.put(&node)?;
+        self.emit(id, ActivityKind::Created);
+        Ok(node)
+    }
+
     /// Update a node's body (and optionally title). Loads, mutates, persists.
     pub fn update_note(&self, id: NodeId, body: String, title: Option<String>) -> Result<Node, Error> {
         let mut node = self.vault.get(&id)?.ok_or(Error::NotFound(id.to_string()))?;

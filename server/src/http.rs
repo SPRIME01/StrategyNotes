@@ -61,6 +61,7 @@ pub async fn serve(data_dir: &Path, port: u16) -> Result<(), Box<dyn std::error:
     let app = Router::new()
         .route("/api/health", get(health))
         .route("/api/node/:id", get(get_node).patch(patch_node))
+        .route("/api/node", post(create_node))
         .route("/api/nodes/:ty", get(list_nodes_by_type))
         .route("/api/notes", post(create_note))
         .route("/api/notes/:id", axum::routing::put(update_note).delete(delete_note))
@@ -160,16 +161,32 @@ async fn update_note(
     Ok(Json(serde_json::to_value(&node)?))
 }
 
-/// PATCH /api/node/:id — gate-safe concept-doc edit. Re-tags type, sets body,
-/// merges frontmatter. `status` is ignored (gate-owned); lifecycle transitions
-/// use accept_evidence / approve_bet / commit_work_package / etc.
+/// POST /api/node — create a typed node from frontmatter + body (OKF import +
+/// the create counterpart to PATCH). Frontmatter arrives as YAML text and is
+/// parsed server-side (the only YAML-aware layer). `type`/`status` are stripped
+/// (type → the `ty` arg; status is gate-owned). Unknown types fall back to Note.
 #[derive(Deserialize)]
-struct PatchNodeBody {
+struct CreateNodeBody {
     #[serde(rename = "type")]
     ty: Option<String>,
+    frontmatter_yaml: Option<String>,
     body: Option<String>,
-    #[serde(default)]
-    frontmatter: serde_json::Map<String, serde_json::Value>,
+}
+
+async fn create_node(
+    State(st): State<Arc<ServerState>>,
+    Json(b): Json<CreateNodeBody>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let ty = match b.ty {
+        Some(s) => from_snake_case::<NodeType>(&s).unwrap_or(NodeType::Note),
+        None => NodeType::Note,
+    };
+    let fm: strategynotes_core::node::Frontmatter = match b.frontmatter_yaml {
+        Some(y) => strategynotes_core::format::frontmatter_from_yaml_str(&y).unwrap_or_default(),
+        None => Default::default(),
+    };
+    let node = st.app().create_node(ty, fm, b.body.unwrap_or_default())?;
+    Ok(Json(serde_json::to_value(&node)?))
 }
 
 async fn patch_node(
@@ -188,6 +205,16 @@ async fn patch_node(
     .map_err(|e| AppError(StatusCode::BAD_REQUEST, format!("frontmatter: {e}")))?;
     let node = st.app().update_node(NodeId::parse(&id)?, ty, b.body, fm)?;
     Ok(Json(serde_json::to_value(&node)?))
+}
+
+/// PATCH /api/node/:id body — gate-safe concept-doc edit.
+#[derive(Deserialize)]
+struct PatchNodeBody {
+    #[serde(rename = "type")]
+    ty: Option<String>,
+    body: Option<String>,
+    #[serde(default)]
+    frontmatter: serde_json::Map<String, serde_json::Value>,
 }
 
 async fn delete_note(

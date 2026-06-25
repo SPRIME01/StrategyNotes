@@ -87,3 +87,50 @@ function yamlVal(v: unknown): string {
   if (v === null || v === undefined) return '""';
   return String(v);
 }
+
+// ── Import (inverse of exportOkfBundle) ──
+// Parse OKF concept doc(s): frontmatter (YAML text, parsed server-side) + body.
+// The frontend only splits text; YAML semantics stay in core (hexagonal).
+
+export interface ParsedConcept {
+  type: string;
+  frontmatterYaml: string;
+  body: string;
+}
+
+/** Reserved OKF filenames that are not concepts (OKF §3.1). */
+export function isReservedOkfName(filename: string): boolean {
+  return /^(index|log)\.md$/i.test(filename.split(/[\\/]/).pop() ?? "");
+}
+
+/** Parse one concept doc (`---\n<yaml>\n---\n<body>`). No frontmatter → note. */
+export function parseConceptFile(text: string): ParsedConcept | null {
+  const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+  if (!m) return { type: "note", frontmatterYaml: "", body: text.trim() };
+  const fm = m[1];
+  const body = m[2];
+  const tm = fm.match(/^type:\s*(.+?)\s*$/m);
+  return { type: tm ? tm[1].trim().replace(/^["']|["']$/g, "") : "note", frontmatterYaml: fm, body };
+}
+
+/** Split a file that may hold one or many concatenated concepts (our bundle
+ *  export round-trips through this). Finds each `---\n<yaml>\n---\n` frontmatter
+ *  block; the body is the text from that block's end to the next block's start. */
+export function splitConcepts(text: string): ParsedConcept[] {
+  const re = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/gm;
+  const blocks: { start: number; end: number; fm: string }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) blocks.push({ start: m.index, end: re.lastIndex, fm: m[1] });
+  if (blocks.length === 0) {
+    const c = parseConceptFile(text);
+    return c ? [c] : [];
+  }
+  const out: ParsedConcept[] = [];
+  for (let i = 0; i < blocks.length; i++) {
+    const nextStart = i + 1 < blocks.length ? blocks[i + 1].start : text.length;
+    const body = text.slice(blocks[i].end, nextStart).replace(/^\r?\n/, "").replace(/\r?\n+$/, "");
+    const tm = blocks[i].fm.match(/^type:\s*(.+?)\s*$/m);
+    out.push({ type: tm ? tm[1].trim().replace(/^["']|["']$/g, "") : "note", frontmatterYaml: blocks[i].fm, body });
+  }
+  return out;
+}

@@ -195,6 +195,13 @@ pub fn frontmatter_from<T: Serialize>(val: &T) -> Result<Frontmatter, Error> {
     Ok(value_to_map(value))
 }
 
+/// Parse a YAML frontmatter string into a Frontmatter map. Used by the OKF
+/// import path (POST /api/node) so YAML parsing stays in core (serde_yaml is a
+/// core dep), not in the driving HTTP layer.
+pub fn frontmatter_from_yaml_str(s: &str) -> Result<Frontmatter, Error> {
+    serde_yaml::from_str(s).map_err(|e| Error::Deserialize(format!("frontmatter yaml: {e}")))
+}
+
 /// Deserialize a typed view from a frontmatter map (id is handled by the caller).
 pub fn frontmatter_to<T: DeserializeOwned>(fm: &Frontmatter) -> Result<T, Error> {
     let value = map_to_value(fm);

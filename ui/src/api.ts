@@ -127,6 +127,10 @@ export const api = {
   /** Gate-safe in-place concept-doc edit. `status` is ignored (gate-owned). */
   patchNode: (id: string, patch: { type?: string; body?: string; frontmatter?: Record<string, unknown> }) =>
     call<WithId>("PATCH", `/api/node/${id}`, patch),
+  /** Create a typed node from OKF frontmatter (YAML, parsed server-side) + body.
+   *  Gate-safe: type/status stripped from frontmatter; unknown types → note. */
+  createNode: (node: { type?: string; frontmatter_yaml?: string; body?: string }) =>
+    call<WithId>("POST", "/api/node", node),
   /** Typed edges of a node (parsed from frontmatter by the server's get_node). */
   edgeTypes: () => EDGE_TYPES,
 };
