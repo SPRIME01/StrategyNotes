@@ -18,6 +18,12 @@ export interface CursorInfo {
   rect: { left: number; top: number; bottom: number } | null;
 }
 
+/** Lightweight content for rendered transclusion of a ((ULID)) ref. */
+export interface RefTarget {
+  title: string;
+  body: string;
+}
+
 export interface EditorSurfaceProps {
   /** Canonical markdown text (the source of truth). */
   value: string;
@@ -33,6 +39,9 @@ export interface EditorSurfaceProps {
   tags: string[];
   /** Intent: open a note by title or id (clicked chip). Meaning stays outside. */
   onOpenNote?: (titleOrId: string) => void;
+  /** Resolve a ((ULID)) block ref to its content, for rendered transclusion.
+   *  The adapter renders the result inline; null = not found. */
+  resolveRef?: (id: string) => Promise<RefTarget | null>;
 }
 
 export interface EditorSurface {

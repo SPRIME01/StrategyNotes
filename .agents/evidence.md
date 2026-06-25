@@ -1123,3 +1123,45 @@ rendered transclusion (show the node's content inline rather than a chip);
 clone placements UI (Places edges).
 
 Status: Accepted
+
+---
+
+## EV-019 — Deferred editor slices: clone UX, rendered transclusion, block-ref completion
+
+Date: 2026-06-23
+Slice: gap-traces.md (deferred items)
+Agent: main (this session)
+Spec IDs: PRD-002, PRD-006, INV-CLONE, INV-PORT.
+
+Three deferred items implemented, each coherent with "markdown is canonical,
+CodeMirror is a reversible projection adapter."
+
+1) Clone placements UX (PRD-006, INV-CLONE) — `CloneSection` in the ContextPanel:
+   lists a node's placements (parents) + a clone-into picker. Backend unchanged
+   (clone/placements already existed). e2e: clone A→B => placements(A)=[B];
+   cycle attempt B→A => HTTP 409 (INV-CLONE enforced by core).
+
+2) Rendered transclusion — `((ULID))` refs render INLINE as a CodeMirror widget
+   showing the referenced node's title + body snippet (TransclusionWidget +
+   StateField ref-cache, lazily resolved via resolveRef). The raw `((ULID))`
+   stays canonical; on the cursor's line it reverts to editable text. Port gains
+   `resolveRef`; CodeMirror is still the only @codemirror/* importer.
+
+3) Block-reference completion (the coherent "auto-ULID-per-block"): typing `((`
+   offers the note's blocks (listBlocks); selecting one promotes it to a node
+   and transcludes it at both the source and the trigger (referenceBlock —
+   single source, no duplication). Markdown-resident — NOT a hidden per-block
+   id DB (that would violate the canonical-markdown invariant). editor/block.ts
+   gains listBlocks + referenceBlock (10 tests).
+
+Verification:
+pnpm -C ui typecheck   # clean
+pnpm -C ui test        # 54 passing (10 files)
+pnpm -C ui build       # 1837 modules, ok
+e2e clone              # A→B ok; B→A cycle => 409
+
+Conflict surfaced: pure Logseq auto-id-per-block (hidden DB) violates the
+markdown-canonical invariant; resolved as lazy, markdown-resident ids (refs
+materialize only when a block is referenced). Flagged in chat + here.
+
+Status: Accepted

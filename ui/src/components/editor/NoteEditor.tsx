@@ -13,10 +13,11 @@ import {
 } from "../notes";
 import { CommandPalette, type BlockCommand } from "./CommandPalette";
 import { MentionAutocomplete, type MentionResult } from "./MentionAutocomplete";
+import { BlockRefMenu } from "./BlockRefMenu";
 import { TypeSelector } from "./TypeSelector";
 import type { EditorSurface, CursorInfo } from "../../editor/port";
 import { CodeMirrorSurface } from "../../editor/adapters/CodeMirrorSurface";
-import { blockAtCursor, deriveBlockTitle, promoteBlockEdit } from "../../editor/block";
+import { blockAtCursor, deriveBlockTitle, promoteBlockEdit, listBlocks, referenceBlock, type BlockItem } from "../../editor/block";
 import type { SaveState } from "./EditorHeader";
 import { fmString, type GraphNode } from "../../lib/node";
 
@@ -26,7 +27,7 @@ export type { SaveState };
  * in frontmatter; the editor reads it via fmString. */
 export type Note = GraphNode;
 
-export type TriggerType = "wikilink" | "tag" | "command" | "mention";
+export type TriggerType = "wikilink" | "tag" | "command" | "mention" | "blockref";
 
 export interface TriggerState {
   type: TriggerType;
@@ -54,6 +55,8 @@ export interface NoteEditorProps {
   onOpenNote?: (titleOrId: string) => void;
   /** Block-as-node (PRD-002): mint a node from a block; return its ULID. */
   onPromoteBlock?: (title: string, body: string) => Promise<string | null>;
+  /** Resolve a ((ULID)) ref to its content for rendered transclusion. */
+  resolveRef?: (id: string) => Promise<{ title: string; body: string } | null>;
   saveState?: SaveState;
   /** Editor surface port (default: CodeMirror). Inject to swap the engine. */
   Surface?: EditorSurface;
@@ -75,6 +78,7 @@ export function NoteEditor({
   onPromote,
   onOpenNote,
   onPromoteBlock,
+  resolveRef,
   saveState = "idle",
   Surface = CodeMirrorSurface,
   searchNotes,
@@ -144,6 +148,20 @@ export function NoteEditor({
     if (!id) return;
     const next = promoteBlockEdit(draft, pos, id);
     if (next == null) return;
+    setDraft(next);
+    onChange?.(next);
+    scheduleSave(next);
+  };
+
+  // ── block reference (`((`): reference any block in the note; it's promoted
+  // to a node and transcluded at both sites (markdown-resident, single source). ──
+  const applyBlockRef = async (blk: BlockItem) => {
+    if (!trigger || !onPromoteBlock) { closeTrigger(); return; }
+    const id = await onPromoteBlock(deriveBlockTitle(blk.content, 0), blk.content);
+    closeTrigger();
+    if (!id) return;
+    const triggerEnd = trigger.startPos + 2 + trigger.partial.length;
+    const next = referenceBlock(draft, { start: trigger.startPos, end: triggerEnd }, blk, id);
     setDraft(next);
     onChange?.(next);
     scheduleSave(next);
@@ -223,6 +241,7 @@ export function NoteEditor({
           noteTitles={noteTitles}
           tags={tags}
           onOpenNote={onOpenNote}
+          resolveRef={resolveRef}
           autoFocus
           placeholder={placeholder ?? "Write in markdown. [[Title]] wikilink · #tag · / for blocks · @ to mention."}
         />
@@ -240,6 +259,16 @@ export function NoteEditor({
               results={mentionResults ?? mentionCandidates ?? []}
               onSelect={applyMention}
               onClose={() => { closeTrigger(); setMentionResults(null); }}
+            />
+          </div>
+        )}
+        {trigger?.type === "blockref" && (
+          <div style={overlayStyle("above")}>
+            <BlockRefMenu
+              query={trigger.partial}
+              blocks={listBlocks(draft)}
+              onSelect={(b) => void applyBlockRef(b)}
+              onClose={closeTrigger}
             />
           </div>
         )}
@@ -277,6 +306,15 @@ export function detectTrigger(text: string, cursor: number): TriggerState | null
   if (atMatch) {
     const startPos = before.length - atMatch[1].length;
     return { type: "mention", startPos, partial: atMatch[1].trim() };
+  }
+
+  // `((` block reference — open parens not yet closed by `))`, same line.
+  const parenOpen = before.lastIndexOf("((");
+  if (parenOpen !== -1 && parenOpen >= lineStart) {
+    const afterOpen = before.slice(parenOpen + 2);
+    if (!afterOpen.includes("))") && !afterOpen.includes("\n")) {
+      return { type: "blockref", startPos: parenOpen, partial: afterOpen };
+    }
   }
 
   // Reuse wikilink + tag detection from the notes module.

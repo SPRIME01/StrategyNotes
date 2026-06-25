@@ -8,6 +8,7 @@ import { SectionLabel } from "../../atoms";
 import { LinkedSection } from "./LinkedSection";
 import { QuickActionsSection } from "./QuickActionsSection";
 import { ProofBurdenPanel } from "./ProofBurdenPanel";
+import { CloneSection } from "./CloneSection";
 import type { GraphNode } from "../../lib/node";
 
 export interface ContextPanelProps {
@@ -44,6 +45,9 @@ export function ContextPanel({
 
       <SectionLabel>Proof Burden</SectionLabel>
       {proof ?? <ProofBurdenPanel node={node} onLinked={onLinked} />}
+
+      <SectionLabel>Clones</SectionLabel>
+      <CloneSection id={node?.id ?? null} onCloned={onLinked} />
 
       <SectionLabel>Quick Actions</SectionLabel>
       {actions ?? (

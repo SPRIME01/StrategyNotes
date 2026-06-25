@@ -146,3 +146,29 @@ body {
 .cm-content .tok-callout-tip { border-left-color: var(--color-gate-info); background: var(--color-gate-info-bg); }
 .cm-content .tok-callout-warn { border-left-color: var(--color-gate-warn); background: var(--color-gate-warn-bg); }
 .cm-content .tok-callout-info { border-left-color: var(--color-border-strong); background: var(--color-surface-3); }
+
+/* Rendered transclusion: a ((ULID)) replaced inline by the node's content. */
+.cm-content .tok-transclusion {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  background: var(--color-surface-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  padding: 0 4px;
+  cursor: pointer;
+  max-width: 100%;
+}
+.cm-content .tok-transclusion .tc-title {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  color: var(--color-primary);
+  white-space: nowrap;
+}
+.cm-content .tok-transclusion .tc-body {
+  color: var(--color-muted-foreground);
+  font-size: 0.9em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -52,3 +52,56 @@ export function deriveBlockTitle(text: string, cursorPos: number, maxWords = 6):
   const words = content.replace(/^#+\s*/, "").split(/\s+/).filter(Boolean);
   return words.slice(0, maxWords).join(" ") || "Block";
 }
+
+/** All referenceable blocks in a note (non-empty lines that aren't bare refs). */
+export interface BlockItem {
+  start: number;   // line start offset
+  end: number;      // line end offset (excl. newline)
+  markerLen: number;
+  content: string;
+}
+
+export function listBlocks(text: string): BlockItem[] {
+  const out: BlockItem[] = [];
+  let offset = 0;
+  for (const line of text.split("\n")) {
+    const start = offset;
+    const end = offset + line.length;
+    const m = line.match(/^(\s*(?:[-*+] |\d+\. |>+ |#+ )?)([\s\S]*)$/);
+    const marker = m?.[1] ?? "";
+    const content = (m?.[2] ?? "").trim();
+    if (content && !isBlockRef(content)) {
+      out.push({ start, end, markerLen: marker.length, content });
+    }
+    offset = end + 1;
+  }
+  return out;
+}
+
+/**
+ * Reference a block from a `((` trigger: promote the block's source line to a
+ * `((id))` transclusion AND insert `((id))` at the trigger. Single source of
+ * truth (the node), referenced in two places — Logseq-style block reference,
+ * expressed in canonical markdown. If the trigger is ON the block's own line,
+ * it degrades to a plain promote (no second ref).
+ */
+export function referenceBlock(
+  text: string,
+  trigger: { start: number; end: number },
+  block: BlockItem,
+  id: string,
+): string {
+  const ref = blockRef(id);
+  // Trigger on the block's own line: degrade to a plain promote (one ref).
+  if (trigger.start >= block.start && trigger.start <= block.end) {
+    return promoteBlockEdit(text, trigger.start, id) ?? text;
+  }
+  const edits: { from: number; to: number; insert: string }[] = [
+    { from: trigger.start, to: trigger.end, insert: ref },
+    { from: block.start + block.markerLen, to: block.end, insert: ref },
+  ];
+  edits.sort((a, b) => b.from - a.from); // high-offset-first keeps earlier offsets valid
+  let out = text;
+  for (const e of edits) out = out.slice(0, e.from) + e.insert + out.slice(e.to);
+  return out;
+}

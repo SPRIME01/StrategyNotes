@@ -161,6 +161,12 @@ export function NotesScreen({
                   const n = await store.create(title, body);
                   return n?.id ?? null;
                 }}
+                resolveRef={async (id) => {
+                  try {
+                    const n = await api.getNode(id) as unknown as GraphNode;
+                    return { title: fmString(n, "title"), body: n.body ?? "" };
+                  } catch { return null; }
+                }}
                 searchNotes={async (q) =>
                   mentionCandidates.filter((m) => m.title.toLowerCase().includes(q.toLowerCase()))
                 }

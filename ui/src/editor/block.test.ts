@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { blockAtCursor, promoteBlockEdit, deriveBlockTitle, blockRef, isBlockRef } from "./block";
+import { blockAtCursor, promoteBlockEdit, deriveBlockTitle, blockRef, isBlockRef, listBlocks, referenceBlock } from "./block";
 
 describe("block-as-node helpers", () => {
   it("locates the block at the cursor with its marker + content", () => {
@@ -40,5 +40,36 @@ describe("block-as-node helpers", () => {
   it("handles a quoted block marker", () => {
     const out = promoteBlockEdit("> some quote", 3, "01J" + "0".repeat(23));
     expect(out).toMatch(/^> \(\([0-9A-Z]{26}\)\)$/);
+  });
+});
+
+describe("block reference completion", () => {
+  it("lists referenceable blocks, skipping bare refs", () => {
+    const id = "01J" + "0".repeat(23);
+    const blocks = listBlocks(`intro\n- ship\n- ((${id}))\nempty later`);
+    expect(blocks.map((b) => b.content)).toEqual(["intro", "ship", "empty later"]);
+  });
+
+  it("referenceBlock converts the source block AND inserts a ref at the trigger", () => {
+    const text = "intro\n- ship onboarding\nmore";
+    const id = "01J" + "0".repeat(23);
+    const ship = listBlocks(text)[1];
+    // trigger `((` typed inside "intro" (offsets 0-4): references the ship block.
+    const trigger = { start: 2, end: 4 };
+    const out = referenceBlock(text, trigger, ship, id);
+    const count = (out.match(new RegExp(`\\(\\(${id}\\)\\)`, "g")) || []).length;
+    expect(count).toBe(2); // one at the trigger site, one at the source block
+    expect(out).toContain(`\n- ((${id}))\n`); // ship source became a transclusion
+  });
+
+  it("degrades to plain promote when the trigger is on the block's own line", () => {
+    const text = "- ship onboarding";
+    const id = "01J" + "0".repeat(23);
+    const blk = listBlocks(text)[0];
+    const trigger = { start: 2, end: 4 }; // inside the block line
+    const out = referenceBlock(text, trigger, blk, id);
+    const count = (out.match(new RegExp(`\\(\\(${id}\\)\\)`, "g")) || []).length;
+    expect(count).toBe(1);
+    expect(out).toBe(`- ((${id}))`);
   });
 });
