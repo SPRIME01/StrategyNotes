@@ -10,6 +10,7 @@ import { api, type GateResult } from "./api";
 import { Sidebar, type ViewId } from "./components/layout/Sidebar";
 import { NotesScreen } from "./views/NotesScreen";
 import { JournalView } from "./views/JournalView";
+import { DocBrowser } from "./views/DocBrowser";
 import { useKeyboardShortcuts, ShortcutsHelp } from "./hooks/useKeyboardShortcuts";
 import { useTypedNodes, useNode } from "./hooks/useTypedNodes";
 import {
@@ -65,7 +66,7 @@ export function App() {
           <div className="mx-auto max-w-[1340px]">
             {view === "cockpit" && <CaseCockpit />}
             {view === "evidence" && <EvidenceInbox />}
-            {view === "erd" && <ErdView />}
+            {view === "docs" && <DocBrowser />}
             {view === "bets" && <BetBoard />}
             {view === "trace" && <TraceExplorer />}
             {view === "work" && <WorkPlanner />}
@@ -587,46 +588,7 @@ function PageWithHead({ kicker, title, sub, children }: { kicker: string; title:
   );
 }
 
-// ─── ERD (generated) — a living view over accepted evidence nodes (OKF index style) ───
-
-function ErdView() {
-  const { nodes, loading } = useTypedNodes("evidence_item");
-  const accepted = nodes.filter((e) => fmString(e, "status").toLowerCase() === "accepted");
-  if (loading) return <PageWithHead kicker="REALITY" title="Evidence Reality Dossier (generated)"><LoadingRow label="evidence" /></PageWithHead>;
-  return (
-    <PageWithHead
-      kicker="REALITY · GENERATED"
-      title="Evidence Reality Dossier"
-      sub="An ERD is not a static file — it is regenerated from accepted evidence nodes every time you open it."
-    >
-      {accepted.length === 0 ? (
-        <EmptyState noun="accepted evidence" hint="accept evidence in the Evidence Inbox" />
-      ) : (
-        <Panel>
-          <div className="flex flex-col gap-2">
-            {accepted.map((e) => {
-              const contradicts = fmList(e, "contradicts");
-              return (
-                <div key={e.id} className="border-b border-border pb-2 last:border-0">
-                  <div className="flex items-center gap-2">
-                    <ProofLevelBadge level={fmString(e, "proof_level", "—")} />
-                    {fmFilled(e, "source_chunk") && <Badge variant="outline" className="text-[10px] font-mono">src: {fmString(e, "source_chunk").slice(0, 10)}</Badge>}
-                    {contradicts.length > 0 && <ContradictionBadge />}
-                  </div>
-                  <p className="mt-1 text-sm">{nodeExcerpt(e)}</p>
-                  <p className="mt-0.5 font-mono text-[10px] text-faint">{e.id.slice(0, 18)}</p>
-                </div>
-              );
-            })}
-          </div>
-        </Panel>
-      )}
-      <p className="mt-3 text-xs text-muted-ink">
-        {accepted.length} of {nodes.length} evidence items accepted. Drafted items are excluded from the dossier until they pass the acceptance gate.
-      </p>
-    </PageWithHead>
-  );
-}
+// ─── ERD (generated) — folded into the DocBrowser (docSpecs.ts ERD spec) ───
 
 // ─── effect helpers (ponytail: avoid pulling in a heavier effect-per-deps lib) ───
 

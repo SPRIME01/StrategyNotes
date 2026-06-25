@@ -1165,3 +1165,37 @@ markdown-canonical invariant; resolved as lazy, markdown-resident ids (refs
 materialize only when a block is referenced). Flagged in chat + here.
 
 Status: Accepted
+
+---
+
+## EV-020 — Generated document views (ORD/SLD/EDS/VSD + ERD via DocBrowser)
+
+Date: 2026-06-23
+Slice: generated documents (framework §4368)
+Agent: main (this session)
+Spec IDs: PRD-009..014 (strategy document stack), SDS-UI.
+
+Documents are living views over linked nodes, not static files. A reusable
+`GeneratedDoc` renders a DECLARATIVE spec (sections → node type + fields +
+filter) as a dossier — the OKF index.md / Obsidian-Dataview model, strategy-native.
+
+- `ui/src/views/GeneratedDoc.tsx` — DocSpec/DocSectionSpec types + renderer
+  (sections over typed nodes via useTypedNodes; per-field rows; proof/status
+  badges; honest empty states; honors filters).
+- `ui/src/views/docSpecs.ts` — the five docs as data:
+  ERD (accepted evidence), ORD (outcome requirements + acceptance_criteria),
+  SLD (strategic claims + assumptions), EDS (work packages), VSD (experiments +
+  metrics). Field names mirror core/src/{strategy,execution}.rs.
+- `ui/src/views/DocBrowser.tsx` — tab browser across the five; regenerates on open.
+- Nav: "Docs (generated)" replaces the standalone ERD entry (ERD is now the
+  browser's first tab). Standalone ErdView removed (folded into the ERD spec).
+
+Verification:
+pnpm -C ui typecheck   # clean
+pnpm -C ui test        # 55 passing (11 files); GeneratedDoc test proves the
+                       # section filter (ERD shows only accepted evidence)
+pnpm -C ui build       # 1840 modules, ok
+# e2e (server 8803): PATCH note -> ord {statement, acceptance_criteria[]};
+#   GET /api/nodes/ord -> [node]; fields resolve → ORD doc renders real data.
+
+Status: Accepted

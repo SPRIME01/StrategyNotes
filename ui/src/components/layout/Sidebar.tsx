@@ -7,7 +7,7 @@ import { NewPageButton } from "./NewPageButton";
 
 export type ViewId =
   | "notes" | "journal"
-  | "cockpit" | "evidence" | "erd"
+  | "cockpit" | "evidence" | "docs"
   | "bets" | "trace"
   | "work" | "runbook"
   | "daynote" | "vrd"
@@ -20,8 +20,8 @@ export interface NavDef {
 
 export const NAV: NavDef[] = [
   { group: "Notes", items: [{ id: "notes", label: "All Notes" }, { id: "journal", label: "Journal" }] },
-  { group: "Reality", items: [{ id: "cockpit", label: "Case Cockpit" }, { id: "evidence", label: "Evidence Inbox" }, { id: "erd", label: "ERD (generated)" }] },
-  { group: "Strategy", items: [{ id: "bets", label: "Bet Board" }, { id: "trace", label: "Trace Explorer" }] },
+  { group: "Reality", items: [{ id: "cockpit", label: "Case Cockpit" }, { id: "evidence", label: "Evidence Inbox" }] },
+  { group: "Strategy", items: [{ id: "docs", label: "Docs (generated)" }, { id: "bets", label: "Bet Board" }, { id: "trace", label: "Trace Explorer" }] },
   { group: "Execution", items: [{ id: "work", label: "Work / Timebox" }, { id: "runbook", label: "Execution Runbook" }] },
   { group: "Learning", items: [{ id: "daynote", label: "Daynote Ledger" }, { id: "vrd", label: "VRD / Value" }] },
   { group: "Governance", items: [{ id: "agent", label: "Agent Drafts" }] },
