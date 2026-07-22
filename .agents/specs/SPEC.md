@@ -36,6 +36,7 @@ Every implementation slice MUST cite the PRD/SDS/INV/TST IDs it satisfies. If be
 StrategyNotes is a **strategy-native notes app**: every note can become part of a traceable strategy case, every strategic claim can be linked to evidence, and every intended action must be costed, timeboxed, reviewed, and converted into learning.
 
 It is the synthesis of two prior ideas:
+
 - *NexusNotes*: how should knowledge be stored, linked, cloned, rendered, and logged?
 - *Strategy Kernel*: how should strategy be evidenced, decided, executed, validated, and claimed?
 

@@ -67,8 +67,6 @@ Remaining gaps:
 
 Status: Accepted
 
----
-
 ## EV-001 — Phase 1 shared contracts (EV-TYP + EV-CT)
 
 Date: 2026-06-21
@@ -1233,5 +1231,175 @@ pnpm -C ui typecheck   # clean
 pnpm -C ui test        # 60 passing (11 files)
 pnpm -C ui build       # 1841 modules, ok
 e2e POST /api/node     # gate-safe import (status stripped)
+
+Status: Accepted
+
+---
+
+## EV-022 — Dev harness justfile parse fix
+
+Date: 2026-06-25
+Slice: DEV-HARNESS-001 — `just dev-up` parser failure
+Agent: main (this session)
+Spec IDs: SDS-OBS, TST-OBS.
+
+Bug:
+`just dev-up` failed before any dev process could start because the `seed`
+recipe header used assignment syntax inside a recipe parameter list:
+`seed backend := "8787":`.
+
+Root cause:
+In `just 1.43.0`, recipe default parameters use `=`, while `:=` is top-level
+variable assignment syntax. The invalid token made the whole `justfile`
+unparseable, so unrelated recipes such as `dev-up` were blocked.
+
+Fix:
+- `justfile`: `seed backend="8787":`
+
+Red/green evidence:
+```text
+RED: just --list
+error: Expected '*', ':', '$', '=', identifier, or '+', but found ':='
+  ——▶ justfile:83:14
+83 │ seed backend := "8787":
+
+TOGGLE:
+printf 'seed backend="8787":\n  echo {{backend}}\n' | just --justfile /dev/stdin --list
+Available recipes:
+    seed backend="8787"
+```
+
+Commands run:
+```bash
+just --list
+just dev-up
+curl -sS -i http://localhost:8787/api/health
+curl -sS -I http://localhost:5173/
+just --dry-run seed
+cargo test --workspace --exclude strategynotes-calendar
+pnpm -C ui test
+pnpm -C ui typecheck
+```
+
+Result:
+```text
+just --list: recipes list successfully, including seed backend="8787"
+just dev-up: printed UI/backend URLs and started detached services
+backend health: HTTP/1.1 200 OK, body "ok"
+ui: HTTP/1.1 200 OK, Content-Type: text/html
+just --dry-run seed: expands http://localhost:8787/api/seed
+cargo test --workspace --exclude strategynotes-calendar: passed
+pnpm -C ui test: 60 passed, 0 failed
+pnpm -C ui typecheck: exit 0
+```
+
+Verification note:
+`cargo test --workspace` was also attempted. It compiled and passed many suites,
+then hung for more than two minutes in `strategynotes-calendar` provider tests
+(`caldav_*`, `google_*`, `microsoft_*`). That target is unrelated to the
+justfile parse fix and was excluded for the focused Rust gate above.
+
+Status: Accepted
+
+---
+
+## EV-023 — Full UI seed and onboarding population
+
+Date: 2026-06-25
+Slice: SEED-ONBOARDING-001 — populate seed/onboarding content for primary UI pages
+Agent: main (this session)
+Spec IDs: PRD-008..014, PRD-018, PRD-020, PRD-022, PRD-024, PRD-026, PRD-028, PRD-029; SDS-NODE, SDS-GRAPH, SDS-STRAT, SDS-EVID, SDS-WORK, SDS-TIME, SDS-TRACE, SDS-OBS; INV-DUR, INV-PORT, INV-EDGE, INV-EVID, INV-CONTRA, INV-HUMAN, INV-BET, INV-WORK, INV-TIME, INV-REVIEW, INV-VALUE.
+
+Discovery:
+- Reset/seed recipe path: `just reset` wipes `strategynotes-data/{index.db,vault,daynotes}`;
+  `just seed` calls `POST /api/seed`.
+- Backend path: `server/src/http.rs::seed` rebuilds the derived index, calls
+  `App::seed_demo`, then rebuilds again.
+- Core path moved from a monolithic service method into `core/src/seed.rs` and
+  phase modules under `core/src/seed/`.
+
+What changed:
+- Seed now builds one coherent demo strategy graph: case, source, chunks,
+  evidence, ERD/ORD/SLD/EDS/VSD/VRD artifacts, claim, assumption,
+  counterevidence, choice cascade, draft and approved bets, experiment, metric,
+  intent and committed work packages, committed timeboxes, review, value claims,
+  agent run, journal note, and graph notes.
+- The approved bet trace reaches work, timeboxes, review, value, validation,
+  and realization artifacts through typed spine edges.
+- Trace nodes now carry readable `title` frontmatter where the UI would
+  otherwise fall back to raw IDs.
+- Seed writes `seed_version: ui_full_v1` at the end and is idempotent afterward.
+
+TDD evidence:
+```text
+RED 1:
+cargo test -p strategynotes-adapters --test seed seed_demo_populates_every_primary_ui_projection
+panic: Deserialize("invalid length")
+Cause: old seed wrote string IDs into typed WorkPackage.inputs.
+
+RED 2:
+approved seed bet should have a readable trace label
+Cause: typed bet/trace nodes lacked UI-readable title/body labels.
+
+GREEN:
+cargo test -p strategynotes-adapters --test seed seed_demo_populates_every_primary_ui_projection
+1 passed, 0 failed
+```
+
+Verification:
+```bash
+rustfmt --edition 2021 --check core/src/seed.rs core/src/seed/*.rs adapters/tests/seed.rs
+cargo check --workspace --exclude strategynotes-calendar
+cargo test --workspace --exclude strategynotes-calendar
+pnpm -C ui typecheck
+pnpm -C ui test
+just reset && just dev-up && just seed
+python3 live API probe for seeded type counts + approved-bet trace labels
+just seed
+```
+
+Result:
+```text
+Touched Rust seed/test files: all <= 250 pure LOC
+cargo check --workspace --exclude strategynotes-calendar: exit 0
+cargo test --workspace --exclude strategynotes-calendar: exit 0
+pnpm -C ui typecheck: exit 0
+pnpm -C ui test: 60 passed, 0 failed
+just reset && just dev-up && just seed: seeded (34 nodes)
+second just seed: already seeded — no changes (0 nodes)
+```
+
+Live API probe after reset/seed:
+```text
+strategy_case: 1
+source: 1
+source_chunk: 3
+evidence_item: 3
+erd/ord/sld/eds/vsd/vrd: 1 each
+strategic_claim: 1
+assumption: 1
+counterevidence: 1
+choice_cascade: 1
+strategy_bet: 2
+experiment: 1
+metric: 1
+work_package: 2
+timebox: 2
+timebox_review: 1
+value_claim: 2
+agent_run: 1
+note: 3
+approved trace: 11 reachable nodes
+trace types: eds, experiment, metric, strategy_bet, timebox,
+  timebox_review, value_claim, vrd, vsd, work_package
+missing trace labels: []
+daynote endpoint for 2026-06-25: 49 non-empty activity lines
+```
+
+Verification note:
+The project-required `.github/copilot-instructions.md` file is absent in this
+checkout. Full `cargo test --workspace` including the `strategynotes-calendar`
+crate was not used as the final gate because that crate previously hung in
+provider tests; the focused non-calendar workspace gate is clean.
 
 Status: Accepted

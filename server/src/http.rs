@@ -62,6 +62,7 @@ pub async fn serve(data_dir: &Path, port: u16) -> Result<(), Box<dyn std::error:
         .route("/api/health", get(health))
         .route("/api/node/:id", get(get_node).patch(patch_node))
         .route("/api/node", post(create_node))
+        .route("/api/seed", post(seed))
         .route("/api/nodes/:ty", get(list_nodes_by_type))
         .route("/api/notes", post(create_note))
         .route("/api/notes/:id", axum::routing::put(update_note).delete(delete_note))
@@ -187,6 +188,17 @@ async fn create_node(
     };
     let node = st.app().create_node(ty, fm, b.body.unwrap_or_default())?;
     Ok(Json(serde_json::to_value(&node)?))
+}
+
+/// POST /api/seed — populate the vault with a coherent demo case so every
+/// frontend view shows data on first run. Idempotent (skips if the demo case
+/// exists). Runs through the gates (accepted evidence, approved bet, committed
+/// work package). Safe: only adds nodes; never deletes.
+async fn seed(State(st): State<Arc<ServerState>>) -> Result<Json<serde_json::Value>, AppError> {
+    st.index.rebuild(&st.vault)?;
+    let count = st.app().seed_demo()?;
+    st.index.rebuild(&st.vault)?;
+    Ok(Json(serde_json::json!({ "seeded": count > 0, "nodes": count })))
 }
 
 async fn patch_node(

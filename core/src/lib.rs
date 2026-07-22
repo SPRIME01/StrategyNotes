@@ -32,6 +32,7 @@ pub mod naming;
 pub mod node;
 pub mod ports;
 pub mod search;
+pub mod seed;
 pub mod services;
 pub mod strategy;
 pub mod time;

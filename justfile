@@ -74,3 +74,22 @@ dev-logs:
   #!/usr/bin/env bash
   touch {{run}}/backend.log {{run}}/ui.log
   tail -f {{run}}/backend.log {{run}}/ui.log
+
+# ─── seed ───────────────────────────────────────────────────────────────
+# Populate the vault with a coherent demo case so every view shows data.
+# Idempotent (skips if the demo case exists). Requires the backend running
+# ('just dev-up'). Runs through the gates: accepted evidence, an approved bet,
+# a committed work package.
+seed backend="8787":
+  @curl -s -X POST http://localhost:{{backend}}/api/seed | python3 -c \
+    'import sys,json; d=json.load(sys.stdin); print("seeded" if d["seeded"] else "already seeded — no changes", "("+str(d["nodes"])+" nodes)")' \
+    2>/dev/null || echo "backend not reachable on :{{backend}} — run 'just dev-up' first"
+
+# ─── reset ──────────────────────────────────────────────────────────────
+# Wipe the dev vault + derived index and re-seed from empty. DEV DATA ONLY:
+# strategynotes-data/ is the local demo workspace (gitignored), not a user vault.
+reset:
+  #!/usr/bin/env bash
+  just dev-down 2>/dev/null || true
+  rm -rf strategynotes-data/index.db strategynotes-data/vault strategynotes-data/daynotes
+  echo "wrote clean vault on next 'just dev-up', then run 'just seed'"

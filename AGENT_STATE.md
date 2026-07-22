@@ -3,11 +3,30 @@
 Living state for agents working in this repo. NOT a source of truth (precedence
 #7 per PLAN sec 1).
 
-Last updated: 2026-06-22 (finish-line build complete)
+Last updated: 2026-06-25 (seed/onboarding population complete)
 
 ## Status
+SEED-ONBOARDING-001 complete. `just reset`, `just dev-up`, and `just seed`
+now populate a coherent 34-node demo graph so all primary UI pages have real
+items; see `.agents/evidence.md` EV-023.
+
+Previous status:
+DEV-HARNESS-001 complete. `just dev-up` no longer fails at parse time; see
+`.agents/evidence.md` EV-022.
+
+Earlier status:
 Finish-line build (Phases A-H) complete. See CONFORMANCE.md for the final
 acceptance checklist and KNOWN_LIMITATIONS.md for honest gaps.
+
+## Current verification note
+`rustfmt --edition 2021 --check core/src/seed.rs core/src/seed/*.rs adapters/tests/seed.rs`,
+`cargo check --workspace --exclude strategynotes-calendar`,
+`cargo test --workspace --exclude strategynotes-calendar`, `pnpm -C ui test`,
+and `pnpm -C ui typecheck` pass. Live recipe QA passed:
+`just reset && just dev-up && just seed` seeded 34 nodes; a second `just seed`
+reported 0 changes. Full `cargo test --workspace` currently hangs in the
+`strategynotes-calendar` crate provider tests and needs a separate debugging
+slice before being used as the release gate.
 
 ## Conformance gate
 ```
@@ -26,6 +45,8 @@ pnpm -C ui test/build ... clean
 - Tauri scaffold (F) — EV-SKIP build/run (webkit2gtk missing).
 - CalendarProvider + 5 adapters (G) — INV-CAL boundary.
 - Conformance docs (H) — CONFORMANCE/KNOWN_LIMITATIONS/README/evidence EV-012.
+- Full UI seed/onboarding demo graph — reset/dev-up/seed produces 34 live nodes
+  across the primary UI projections (EV-023).
 
 ## Next action (recommendation for next release)
 1. Depped machine: build/run Tauri (EV-SKIP here); add icon set.
