@@ -52,3 +52,44 @@ export function useNode(id: string | null) {
 
   return { node, loading };
 }
+
+export const PRIMARY_STRATEGY_TYPES = [
+  "note",
+  "evidence_item",
+  "strategic_claim",
+  "strategy_bet",
+  "work_package",
+  "timebox",
+  "source",
+  "value_claim",
+] as const;
+
+/** List + resolve nodes across all strategy types for linking, cloning, and referencing. */
+export function useAllStrategyNodes() {
+  const [nodes, setNodes] = useState<GraphNode[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const allIds = (
+        await Promise.all(PRIMARY_STRATEGY_TYPES.map((ty) => api.nodesByType(ty).catch(() => [])))
+      ).flat();
+      const uniqueIds = Array.from(new Set(allIds));
+      const resolved = await Promise.all(
+        uniqueIds.slice(0, 300).map((id) =>
+          api.getNode(id).then((n) => n as unknown as GraphNode).catch(() => null),
+        ),
+      );
+      setNodes(resolved.filter((n): n is GraphNode => n !== null));
+    } catch {
+      setNodes([]);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  return { nodes, loading, reload: load };
+}
+

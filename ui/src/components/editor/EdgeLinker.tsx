@@ -5,13 +5,13 @@
 
 import { useState } from "react";
 import { api, EDGE_TYPES } from "../../api";
-import { useTypedNodes } from "../../hooks/useTypedNodes";
+import { useAllStrategyNodes } from "../../hooks/useTypedNodes";
 import { nodeTitle } from "../../lib/node";
 
 const COMMON = ["supports", "contradicts", "derives_from", "assumes", "requires", "validates", "created_from"];
 
 export function EdgeLinker({ fromId, onLinked }: { fromId: string; onLinked?: () => void }) {
-  const { nodes } = useTypedNodes("note");
+  const { nodes } = useAllStrategyNodes();
   const [to, setTo] = useState("");
   const [edgeType, setEdgeType] = useState<string>("supports");
   const [busy, setBusy] = useState(false);
@@ -34,9 +34,9 @@ export function EdgeLinker({ fromId, onLinked }: { fromId: string; onLinked?: ()
     <div className="mt-1 flex flex-col gap-1 border-t border-border pt-2">
       <div className="text-[10px] font-mono uppercase tracking-wider text-faint">Link (typed edge)</div>
       <select value={to} onChange={(e) => setTo(e.target.value)} className="rounded border bg-surface-2 px-2 py-1 text-xs">
-        <option value="">target note…</option>
-        {nodes.filter((n) => n.id !== fromId).slice(0, 50).map((n) => (
-          <option key={n.id} value={n.id}>{nodeTitle(n)}</option>
+        <option value="">target node…</option>
+        {nodes.filter((n) => n.id !== fromId).slice(0, 100).map((n) => (
+          <option key={n.id} value={n.id}>[{n.type}] {nodeTitle(n)}</option>
         ))}
       </select>
       <div className="flex gap-1">

@@ -9,6 +9,7 @@
 // ponytail: CSS grid, no layout library.
 
 import { useEffect, useState, type ReactNode } from "react";
+import { PanelRight } from "lucide-react";
 import { cn } from "../lib/utils";
 
 const CONTEXT_KEY = "sn.editor.contextOpen";
@@ -25,13 +26,27 @@ export function EditorLayout({
   contextPanel: ReactNode;
 }) {
   const [contextOpen, setContextOpen] = useState<boolean>(() => {
-    const saved = localStorage.getItem(CONTEXT_KEY);
-    if (saved !== null) return saved === "1";
+    try {
+      if (typeof window !== "undefined" && typeof window.localStorage !== "undefined") {
+        const saved = window.localStorage.getItem(CONTEXT_KEY);
+        if (saved !== null) return saved === "1";
+      }
+    } catch {
+      // fallback if storage disabled or unavailable
+    }
     return typeof window !== "undefined" && window.innerWidth >= 1024;
   });
   const [sidebarOpen, setSidebarOpen] = useState(false); // mobile drawer
 
-  useEffect(() => { localStorage.setItem(CONTEXT_KEY, contextOpen ? "1" : "0"); }, [contextOpen]);
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined" && typeof window.localStorage !== "undefined") {
+        window.localStorage.setItem(CONTEXT_KEY, contextOpen ? "1" : "0");
+      }
+    } catch {
+      // ignore
+    }
+  }, [contextOpen]);
 
   const toggleContext = () => setContextOpen((o) => !o);
 
@@ -102,12 +117,14 @@ function ContextToggle({ open, onToggle }: { open: boolean; onToggle: () => void
     <button
       onClick={onToggle}
       className={cn(
-        "shrink-0 rounded-md border px-2 py-1 text-xs transition-colors",
+        "flex items-center gap-1.5 shrink-0 rounded-md border px-2 py-1 text-xs transition-colors",
         open ? "border-primary/40 bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:bg-secondary",
       )}
       title="Toggle context panel (⌘\\)"
+      aria-label={open ? "Hide context panel" : "Show context panel"}
     >
-      {open ? "-hide-panel-" : "+panel+"}
+      <PanelRight className="size-3.5" />
+      <span>{open ? "Hide panel" : "Context panel"}</span>
     </button>
   );
 }

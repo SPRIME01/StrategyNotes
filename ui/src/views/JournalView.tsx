@@ -27,14 +27,21 @@ export function JournalView({ onSelectView }: { onSelectView: (id: ViewId) => vo
 
   const formatted = formatJournalDate(date);
 
-  // Days with entries (for dot indicators): notes whose title parses as a date.
+  // Days with entries (for dot indicators): convert note titles to ISO YYYY-MM-DD.
   const entryDays = useMemo(() => {
     const out: string[] = [];
+    const months: Record<string, string> = {
+      Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06",
+      Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12",
+    };
     for (const n of store.notes) {
       const title = fmString(n, "title");
-      // Match our ordinal-date format loosely.
-      const m = title.match(/^[A-Z][a-z]{2} \d{1,2}(st|nd|rd|th), \d{4}$/);
-      if (m) out.push(title);
+      const m = title.match(/^([A-Z][a-z]{2})\s+(\d{1,2})(?:st|nd|rd|th),\s+(\d{4})$/);
+      if (m && months[m[1]]) {
+        out.push(`${m[3]}-${months[m[1]]}-${m[2].padStart(2, "0")}`);
+      } else if (/^\d{4}-\d{2}-\d{2}$/.test(title)) {
+        out.push(title);
+      }
     }
     return out;
   }, [store.notes]);

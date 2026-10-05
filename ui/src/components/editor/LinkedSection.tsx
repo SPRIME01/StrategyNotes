@@ -30,9 +30,12 @@ export function LinkedSection({
             try {
               const n = await api.getNode(id);
               const body = typeof n.body === "string" ? n.body : "";
+              const fm = (n as { frontmatter?: Record<string, unknown> }).frontmatter;
+              const firstLine = body.split("\n")[0]?.replace(/^#+\s*/, "").trim();
+              const title = String(fm?.title ?? (n as Record<string, unknown>).title ?? (firstLine || "Untitled"));
               return {
                 id,
-                title: String((n as Record<string, unknown>).title ?? "Untitled"),
+                title,
                 snippet: body.slice(0, 60),
               } satisfies Backlink;
             } catch {

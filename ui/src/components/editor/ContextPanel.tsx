@@ -16,6 +16,7 @@ export interface ContextPanelProps {
   onNavigateNote?: (id: string) => void;
   onNewNote?: () => void;
   onLinkItem?: () => void;
+  onAddToGraph?: () => void;
   onShare?: () => void;
   /** Notify parent to reload after an edge is created (Proof Burden refresh). */
   onLinked?: () => void;
@@ -30,6 +31,7 @@ export function ContextPanel({
   onNavigateNote,
   onNewNote,
   onLinkItem,
+  onAddToGraph,
   onShare,
   onLinked,
   linked,
@@ -51,7 +53,7 @@ export function ContextPanel({
 
       <SectionLabel>Quick Actions</SectionLabel>
       {actions ?? (
-        <QuickActionsSection onNewNote={onNewNote} onLinkItem={onLinkItem} onShare={onShare} />
+        <QuickActionsSection onNewNote={onNewNote} onLinkItem={onLinkItem} onAddToGraph={onAddToGraph} onShare={onShare} />
       )}
     </div>
   );

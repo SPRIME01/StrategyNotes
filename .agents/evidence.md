@@ -1403,3 +1403,72 @@ crate was not used as the final gate because that crate previously hung in
 provider tests; the focused non-calendar workspace gate is clean.
 
 Status: Accepted
+
+---
+
+## EV-024 — Adversarial Audit Full Remediation (CHK-01 through CHK-19)
+
+Date: 2026-10-05
+Slice: AUDIT-REMEDIATION-001 — Full remediation of findings CHK-01 to CHK-19
+Agent: main (Antigravity)
+Spec IDs: PRD-001..029; SDS-NODE, SDS-STORAGE, SDS-INDEX, SDS-GRAPH, SDS-STRAT, SDS-EVID, SDS-GATE, SDS-WORK, SDS-TIME, SDS-UI, SDS-EXEC, SDS-TRACE, SDS-OBS; INV-DUR, INV-PORT, INV-EDGE, INV-EVID, INV-CONTRA, INV-HUMAN, INV-BET, INV-WORK, INV-TIME, INV-REVIEW, INV-VALUE, INV-EXEC.
+
+Remediation Highlights:
+- CHK-01: Disappearing thought bug eliminated. `useNotes.ts` loads primary strategy types, adds `retype` in-place handler; `NotesScreen.tsx` adds type filter bar and type badges.
+- CHK-02: Fixed case-mismatch in `App.tsx` (`status?.toLowerCase() === "drafted"`), restoring "Accept" button in Evidence Inbox.
+- CHK-03: `LinkedSection.tsx` resolves `frontmatter.title` instead of top-level `title`, fixing "Untitled" backlinks.
+- CHK-04: `useAllStrategyNodes()` introduced; `EdgeLinker.tsx` and `CloneSection.tsx` show all strategy node types.
+- CHK-05: Quick Actions in `ContextPanel.tsx` and `NotesScreen.tsx` wired for wikilink copy, trace navigation, and note markdown sharing.
+- CHK-06: `EditorLayout.tsx` panel toggle replaced raw debug text with `PanelRight` Lucide icon and accessible labels.
+- CHK-07: `BetBoard` dynamically routes blocked bets to "Blocked" column and killed bets to "Killed" column; inline editing added for owner, metric, kill criteria, assumptions, and counterevidence review.
+- CHK-08: `WorkPlanner` wired with "Commit [INV-WORK]" and "Schedule Timebox [INV-TIME]"; `nodeExcerpt` strips markdown heading hashtags.
+- CHK-09: `ExecutionRunbook` capture buttons wired to active state; "Complete Timebox Review [INV-REVIEW]" wired; 1-click schedule empty state added.
+- CHK-10: Header `CapacityMeter` dynamically calculates committed pomos from work packages and timeboxes.
+- CHK-11: `CaseCockpit` lifecycle stage name truncation (`.slice(0, 12)`) removed.
+- CHK-12: `JournalView.tsx` standardizes dates to ISO `YYYY-MM-DD`, restoring `JournalDateNav` entry dots.
+- CHK-13: Debounced SQLite FTS5 `/api/search` integrated into `NotesScreen.tsx`.
+- CHK-14: `TraceExplorer` spine nodes made clickable with detailed node inspector; real contradiction edges queried.
+- CHK-15: Added Value Realization Document (`VRD`) specification to `docSpecs.ts`.
+- CHK-16: Added `POST /api/agent-runs` handler in Axum router; reviewer input made editable in `AgentDraftInbox`.
+- CHK-17: Removed full index rebuilds on read GET requests; verified 2.0ms/request read speed with zero disk thrashing.
+- CHK-18: Parameterized timebox timestamps with current ISO time and configurable completion status.
+- CHK-19: Added "Validate [INV-VALUE]" action button in `VrdView`.
+
+Commands run:
+```bash
+cargo check --workspace --exclude strategynotes-calendar
+cargo test --workspace --exclude strategynotes-calendar
+pnpm -C ui typecheck
+pnpm -C ui test --run
+pnpm -C ui build
+python3 live API verification suite
+```
+
+Verification Output:
+```text
+cargo test: 77 passed, 0 failed
+pnpm test:  12 test files passed, 69 passed, 0 failed
+  ✓ src/App.test.tsx (1)
+  ✓ src/remediation.test.tsx (9)
+  ✓ src/hooks/useTypedNodes.test.ts (2)
+  ✓ src/editor/block.test.ts (10)
+  ✓ src/editor/port.test.tsx (1)
+  ✓ src/editor/tokens.test.ts (8)
+  ✓ src/lib/node.test.ts (8)
+  ✓ src/lib/okf.test.ts (9)
+  ✓ src/views/GeneratedDoc.test.tsx (2)
+  ✓ src/components/editor/CommandPalette.test.tsx (4)
+  ✓ src/components/editor/NoteEditor.test.tsx (3)
+  ✓ src/components/editor/editor.test.ts (12)
+pnpm typecheck: clean (0 errors)
+pnpm build: clean bundle built in 8.30s (0 errors)
+live API checks:
+  - POST /api/agent-runs -> status 201 Created (run id: 01M46ZF23TSR0P6P9Z4RDA2K08)
+  - GET /api/search?q=founder -> status 200 (4 results returned)
+  - 10x GET /api/nodes/evidence_item -> 20.0ms total (2.0ms/req, zero rebuild thrashing)
+  - Evidence status check -> lowercase 'accepted'/'drafted' handled cleanly
+  - Work packages & value claims -> commit and validate endpoints functional
+```
+
+Status: Accepted
+

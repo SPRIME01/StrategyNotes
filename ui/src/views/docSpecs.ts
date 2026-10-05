@@ -91,6 +91,26 @@ export const DOC_SPECS: DocSpec[] = [
       },
     ],
   },
+  {
+    id: "vrd",
+    title: "Value Realization Document",
+    kicker: "VALUE",
+    intro: "Actual value delivered versus strategic intent. Weak claims surface as debt. Realized value requires proof links (INV-VALUE).",
+    sections: [
+      {
+        label: "Value Claims",
+        nodeType: "value_claim",
+        fields: [
+          { key: "status", label: "status" },
+          { key: "proof_level", label: "proof level" },
+          { key: "evidence_links", label: "evidence" },
+          { key: "linked_outcome", label: "outcome" },
+        ],
+        caseField: "case",
+        emptyHint: "record value claims against outcomes",
+      },
+    ],
+  },
 ];
 
 // local helper to avoid importing fmString into this spec file (keep specs pure data)

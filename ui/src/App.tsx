@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useMemo, type ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
@@ -17,6 +17,7 @@ import { useTypedNodes, useNode } from "./hooks/useTypedNodes";
 import {
   fmString, fmList, fmBool, nodeTitle, nodeExcerpt, fmFilled, type GraphNode,
 } from "./lib/node";
+import { cn } from "./lib/utils";
 
 const POMOS_AVAILABLE = 24; // ponytail: per-cycle capacity budget; make configurable later
 
@@ -26,6 +27,18 @@ export function App() {
   const [view, setView] = useState<ViewId>("cockpit");
   const [pendingNoteId, setPendingNoteId] = useState<string | null>(null);
   const [caseId, setCaseId] = useState<string | null>(null);
+
+  const timeboxes = useTypedNodes("timebox");
+  const workPackages = useTypedNodes("work_package");
+
+  const committedPomos = useMemo(() => {
+    const tb = timeboxes.nodes.reduce((s, t) => s + Number(fmString(t, "pomos") || 1), 0);
+    const wp = workPackages.nodes.reduce((s, w) => {
+      const isCommitted = fmBool(w, "committed") || fmString(w, "status").toLowerCase() === "committed";
+      return isCommitted ? s + (Number(fmString(w, "pomos")) || 1) : s;
+    }, 0);
+    return Math.max(tb, wp);
+  }, [timeboxes.nodes, workPackages.nodes]);
 
   const { helpOpen, setHelpOpen, shortcuts } = useKeyboardShortcuts([
     {
@@ -62,7 +75,7 @@ export function App() {
             <span className="text-muted-ink">markdown is the source of truth — everything else is generated</span>
           </div>
           <CaseSelector caseId={caseId} onChange={setCaseId} />
-          <CapacityMeter committed={0} available={POMOS_AVAILABLE} />
+          <CapacityMeter committed={committedPomos} available={POMOS_AVAILABLE} />
         </header>
 
         <main className="flex-1 overflow-y-auto p-6">
@@ -167,7 +180,7 @@ function CaseCockpit({ caseId }: { caseId?: string | null }) {
               <div className={`rounded-md px-2 py-1 text-[10px] font-mono uppercase tracking-wider ${
                 i < stageIdx ? "bg-gate-ok-bg text-gate-ok" : i === stageIdx ? "bg-primary text-primary-foreground" : "bg-secondary text-faint"
               }`}>
-                {i < stageIdx ? "✓ " : ""}{s.replace(/_/g, " ").slice(0, 12)}
+                {i < stageIdx ? "✓ " : ""}{s.replace(/_/g, " ")}
               </div>
               {i < STAGES.length - 1 && <div className="h-px w-3 bg-border" />}
             </div>
@@ -261,12 +274,17 @@ function NextBestAction({ draftedEvidence, betsLackKill, bets }: { draftedEviden
 // ─── 2. Evidence Inbox ───
 
 function EvidenceInbox() {
-  const { nodes, loading } = useTypedNodes("evidence_item");
+  const { nodes, loading, reload } = useTypedNodes("evidence_item");
   const [gate, setGate] = useState<Record<string, GateResult>>({});
 
   const accept = async (id: string) => {
-    try { const r = await api.acceptEvidence(id); setGate((g) => ({ ...g, [id]: r })); }
-    catch { setGate((g) => ({ ...g, [id]: { status: "blocked", failed_gates: ["unreachable"] } })); }
+    try {
+      const r = await api.acceptEvidence(id);
+      setGate((g) => ({ ...g, [id]: r }));
+      reload();
+    } catch {
+      setGate((g) => ({ ...g, [id]: { status: "blocked", failed_gates: ["unreachable"] } }));
+    }
   };
 
   if (loading) return <PageWithHead kicker="REALITY" title="Evidence Inbox"><LoadingRow label="evidence" /></PageWithHead>;
@@ -277,8 +295,9 @@ function EvidenceInbox() {
       <div className="flex flex-col gap-2">
         {nodes.map((e) => {
           const status = fmString(e, "status");
+          const isDraft = status.toLowerCase() === "drafted";
           return (
-            <Card key={e.id} className={status === "Drafted" ? "border-dashed border-gate-warn/40" : ""}>
+            <Card key={e.id} className={isDraft ? "border-dashed border-gate-warn/40" : ""}>
               <CardContent className="flex items-start gap-3 py-3">
                 <div className="flex flex-1 flex-col gap-1">
                   <div className="flex items-center gap-2">
@@ -288,7 +307,7 @@ function EvidenceInbox() {
                   </div>
                   <p className="text-sm">{nodeExcerpt(e)}</p>
                 </div>
-                {status === "Drafted" && <Button size="sm" variant="outline" onClick={() => accept(e.id)}>Accept</Button>}
+                {isDraft && <Button size="sm" variant="outline" onClick={() => accept(e.id)}>Accept</Button>}
                 <GateStatusBadge gate={gate[e.id] ?? null} />
               </CardContent>
             </Card>
@@ -313,15 +332,80 @@ const BET_REQS: [string, string][] = [
 function BetBoard() {
   const { nodes, loading, reload } = useTypedNodes("strategy_bet");
   const [gate, setGate] = useState<Record<string, GateResult>>({});
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<{
+    owner: string;
+    kill_criteria: string;
+    success_metric: string;
+    assumptions: string;
+    counterevidence_reviewed: boolean;
+  }>({
+    owner: "",
+    kill_criteria: "",
+    success_metric: "",
+    assumptions: "",
+    counterevidence_reviewed: false,
+  });
+
   const cols = [
     { id: "draft", label: "Draft" }, { id: "blocked", label: "Blocked" },
     { id: "approved", label: "Approved" }, { id: "killed", label: "Killed" },
   ];
 
+  const getCol = (b: GraphNode) => {
+    const st = fmString(b, "status").toLowerCase();
+    if (st === "approved") return "approved";
+    if (st === "killed") return "killed";
+    if (st === "blocked" || gate[b.id]?.status === "blocked") return "blocked";
+    return "draft";
+  };
+
   const approve = async (b: GraphNode) => {
-    try { const r = await api.approveBet(b.id); setGate((g) => ({ ...g, [b.id]: r })); }
-    catch { setGate((g) => ({ ...g, [b.id]: { status: "blocked", failed_gates: ["unreachable"] } })); }
+    try {
+      const r = await api.approveBet(b.id);
+      setGate((g) => ({ ...g, [b.id]: r }));
+    } catch {
+      setGate((g) => ({ ...g, [b.id]: { status: "blocked", failed_gates: ["unreachable"] } }));
+    }
     reload();
+  };
+
+  const kill = async (b: GraphNode) => {
+    try {
+      await api.patchNode(b.id, { frontmatter: { ...b.frontmatter, status: "killed" } });
+      reload();
+    } catch (e) {
+      alert("Failed to kill bet: " + e);
+    }
+  };
+
+  const startEdit = (b: GraphNode) => {
+    setEditingId(b.id);
+    setEditForm({
+      owner: fmString(b, "owner"),
+      kill_criteria: fmString(b, "kill_criteria"),
+      success_metric: fmString(b, "success_metric"),
+      assumptions: fmList(b, "assumptions").join(", "),
+      counterevidence_reviewed: fmBool(b, "counterevidence_reviewed"),
+    });
+  };
+
+  const saveEdit = async (b: GraphNode) => {
+    try {
+      const fm = {
+        ...b.frontmatter,
+        owner: editForm.owner,
+        kill_criteria: editForm.kill_criteria,
+        success_metric: editForm.success_metric,
+        assumptions: editForm.assumptions.split(",").map((s) => s.trim()).filter(Boolean),
+        counterevidence_reviewed: editForm.counterevidence_reviewed,
+      };
+      await api.patchNode(b.id, { frontmatter: fm });
+      setEditingId(null);
+      reload();
+    } catch (e) {
+      alert("Failed to update bet requirements: " + e);
+    }
   };
 
   if (loading) return <PageWithHead kicker="STRATEGY" title="Bet Board"><LoadingRow label="bets" /></PageWithHead>;
@@ -333,25 +417,81 @@ function BetBoard() {
           {cols.map((col) => (
             <div key={col.id} className="flex flex-col gap-2">
               <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-muted-ink">{col.label}</div>
-              {nodes.filter((b) => fmString(b, "status").toLowerCase() === col.id).map((b) => (
-                <Card key={b.id} className={col.id === "blocked" ? "border-gate-bad/40" : col.id === "approved" ? "border-gate-ok/30" : ""}>
+              {nodes.filter((b) => getCol(b) === col.id).map((b) => (
+                <Card key={b.id} className={col.id === "blocked" ? "border-gate-bad/40" : col.id === "approved" ? "border-gate-ok/30" : col.id === "killed" ? "opacity-60" : ""}>
                   <CardContent className="flex flex-col gap-2 py-3">
                     <p className="text-sm font-medium">{nodeExcerpt(b)}</p>
-                    <div className="flex flex-col gap-1">
-                      {BET_REQS.map(([key, label]) => {
-                        const filled = key === "assumptions" ? fmList(b, key).length > 0 : key === "counterevidence_reviewed" ? fmBool(b, key) : fmFilled(b, key);
-                        return (
-                          <div key={label} className="flex items-center gap-1.5 text-[11px]">
-                            <span className={filled ? "text-gate-ok" : "text-gate-bad"}>{filled ? "✓" : "✕"}</span>
-                            <span className={filled ? "text-muted-foreground" : "text-gate-bad"}>{label}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {fmString(b, "status").toLowerCase() === "draft" && (
-                      <Button size="sm" variant="outline" onClick={() => approve(b)}>Approve [INV-BET]</Button>
+                    
+                    {editingId === b.id ? (
+                      <div className="flex flex-col gap-1.5 border-t pt-2 text-xs">
+                        <label className="font-semibold text-muted-ink">Owner</label>
+                        <input
+                          value={editForm.owner}
+                          onChange={(e) => setEditForm((f) => ({ ...f, owner: e.target.value }))}
+                          placeholder="e.g. Lead Strategist"
+                          className="rounded border bg-surface-2 px-1.5 py-1 text-xs"
+                        />
+                        <label className="font-semibold text-muted-ink">Success Metric</label>
+                        <input
+                          value={editForm.success_metric}
+                          onChange={(e) => setEditForm((f) => ({ ...f, success_metric: e.target.value }))}
+                          placeholder="e.g. 5 pilot customers in 30d"
+                          className="rounded border bg-surface-2 px-1.5 py-1 text-xs"
+                        />
+                        <label className="font-semibold text-muted-ink">Kill Criteria</label>
+                        <input
+                          value={editForm.kill_criteria}
+                          onChange={(e) => setEditForm((f) => ({ ...f, kill_criteria: e.target.value }))}
+                          placeholder="e.g. <3 signups after 20 interviews"
+                          className="rounded border bg-surface-2 px-1.5 py-1 text-xs"
+                        />
+                        <label className="font-semibold text-muted-ink">Assumptions (comma-separated)</label>
+                        <input
+                          value={editForm.assumptions}
+                          onChange={(e) => setEditForm((f) => ({ ...f, assumptions: e.target.value }))}
+                          placeholder="speed matters most, founders build fast"
+                          className="rounded border bg-surface-2 px-1.5 py-1 text-xs"
+                        />
+                        <label className="flex items-center gap-2 mt-1">
+                          <input
+                            type="checkbox"
+                            checked={editForm.counterevidence_reviewed}
+                            onChange={(e) => setEditForm((f) => ({ ...f, counterevidence_reviewed: e.target.checked }))}
+                          />
+                          <span>Counterevidence reviewed</span>
+                        </label>
+                        <div className="flex gap-1.5 mt-2">
+                          <Button size="sm" onClick={() => saveEdit(b)}>Save</Button>
+                          <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>Cancel</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex flex-col gap-1">
+                          {BET_REQS.map(([key, label]) => {
+                            const filled = key === "assumptions" ? fmList(b, key).length > 0 : key === "counterevidence_reviewed" ? fmBool(b, key) : fmFilled(b, key);
+                            return (
+                              <div key={label} className="flex items-center gap-1.5 text-[11px]">
+                                <span className={filled ? "text-gate-ok" : "text-gate-bad"}>{filled ? "✓" : "✕"}</span>
+                                <span className={filled ? "text-muted-foreground" : "text-gate-bad"}>{label}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                          {(col.id === "draft" || col.id === "blocked") && (
+                            <Button size="sm" variant="outline" onClick={() => approve(b)}>Approve [INV-BET]</Button>
+                          )}
+                          {col.id !== "approved" && col.id !== "killed" && (
+                            <Button size="sm" variant="ghost" onClick={() => startEdit(b)}>Edit</Button>
+                          )}
+                          {col.id !== "killed" && (
+                            <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => kill(b)}>Kill</Button>
+                          )}
+                        </div>
+                        <GateStatusBadge gate={gate[b.id] ?? null} />
+                      </>
                     )}
-                    <GateStatusBadge gate={gate[b.id] ?? null} />
                   </CardContent>
                 </Card>
               ))}
@@ -367,51 +507,108 @@ function BetBoard() {
 
 function TraceExplorer() {
   const { nodes: roots, loading } = useTypedNodes("strategy_bet");
+  const claims = useTypedNodes("strategic_claim");
   const [rootId, setRootId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [trace, setTrace] = useState<string[]>([]);
   const [tracing, setTracing] = useState(false);
 
   const id = rootId ?? roots[0]?.id ?? null;
-  // re-run trace when id changes
   useTrace(id, setTrace, setTracing);
+
+  const selectedNode = useNode(selectedId);
+
+  // Discover real contradictions from claims or trace nodes
+  const contradictions = useMemo(() => {
+    return claims.nodes.filter((c) => fmList(c, "contradicts").length > 0);
+  }, [claims.nodes]);
 
   return (
     <PageWithHead kicker="STRATEGY" title="Trace Explorer" sub="Source → evidence → claim → bet → work → timebox → review → value. Counterevidence stays visible.">
       {loading ? <LoadingRow label="roots" /> : roots.length === 0 ? <EmptyState noun="traceable nodes" hint="draft a bet first" /> : (
         <div className="mb-3 flex items-center gap-2 text-xs">
           <span className="text-muted-ink">root:</span>
-          <select value={id ?? ""} onChange={(e) => { setRootId(e.target.value); }} className="rounded-md border bg-surface-1 px-2 py-1 text-xs">
+          <select value={id ?? ""} onChange={(e) => { setRootId(e.target.value); setSelectedId(null); }} className="rounded-md border bg-surface-1 px-2 py-1 text-xs">
             {roots.map((r) => <option key={r.id} value={r.id}>{nodeTitle(r)}</option>)}
           </select>
         </div>
       )}
-      <Panel title="Reachable from root">
-        {tracing ? <LoadingRow label="trace" /> : trace.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No reachable nodes (or root has no outgoing typed edges yet).</p>
-        ) : (
-          <div className="flex flex-col gap-1 font-mono text-xs">
-            {trace.map((tid) => <TraceLine key={tid} id={tid} />)}
-          </div>
-        )}
-      </Panel>
-      <Panel title="Counterevidence (INV-CONTRA)">
-        <div className="flex items-center gap-2 text-sm">
-          <ContradictionBadge />
-          <span className="text-muted-foreground">Contradictions surface here when a node has outgoing <code>contradicts</code> edges.</span>
-        </div>
-      </Panel>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Panel title="Reachable from root">
+          {tracing ? <LoadingRow label="trace" /> : trace.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No reachable nodes (or root has no outgoing typed edges yet).</p>
+          ) : (
+            <div className="flex flex-col gap-1 font-mono text-xs">
+              {trace.map((tid) => (
+                <TraceLine
+                  key={tid}
+                  id={tid}
+                  selected={tid === selectedId}
+                  onClick={() => setSelectedId(tid === selectedId ? null : tid)}
+                />
+              ))}
+            </div>
+          )}
+        </Panel>
+
+        <Panel title={selectedId ? `Node Inspection · ${selectedId.slice(0, 10)}` : "Node Inspection"}>
+          {selectedId && selectedNode.node ? (
+            <div className="flex flex-col gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <NodeTypeBadge type={selectedNode.node.type} />
+                <span className="font-semibold">{nodeTitle(selectedNode.node)}</span>
+              </div>
+              <p className="text-muted-foreground">{nodeExcerpt(selectedNode.node, 200)}</p>
+              <div className="rounded border bg-surface-2 p-2 font-mono text-[11px]">
+                <div className="text-muted-ink">Frontmatter:</div>
+                <pre className="overflow-x-auto">{JSON.stringify(selectedNode.node.frontmatter, null, 2)}</pre>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Click any node in the reachable spine to inspect its details and frontmatter edges.</p>
+          )}
+        </Panel>
+      </div>
+
+      <div className="mt-4">
+        <Panel title="Counterevidence (INV-CONTRA)">
+          {contradictions.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              {contradictions.map((c) => (
+                <div key={c.id} className="flex items-center gap-2 text-sm rounded border border-gate-warn/40 p-2 bg-surface-2">
+                  <ContradictionBadge />
+                  <span className="font-medium text-foreground">{nodeTitle(c)}</span>
+                  <span className="text-muted-ink">contradicts:</span>
+                  <span className="font-mono text-xs text-gate-bad">{fmList(c, "contradicts").join(", ")}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-sm">
+              <ContradictionBadge />
+              <span className="text-muted-foreground">No active contradictions found. Outgoing <code>contradicts</code> edges surface here automatically.</span>
+            </div>
+          )}
+        </Panel>
+      </div>
     </PageWithHead>
   );
 }
 
-function TraceLine({ id }: { id: string }) {
+function TraceLine({ id, selected, onClick }: { id: string; selected?: boolean; onClick?: () => void }) {
   const { node } = useNode(id);
   return (
-    <div className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-secondary">
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors",
+        selected ? "bg-primary/10 border border-primary/40 text-foreground" : "hover:bg-secondary text-foreground",
+      )}
+    >
       <NodeTypeBadge type={node ? node.type : "—"} />
-      <span className="text-foreground">{node ? nodeTitle(node) : id}</span>
+      <span className="truncate">{node ? nodeTitle(node) : id}</span>
       <span className="ml-auto text-faint">{id.slice(0, 18)}</span>
-    </div>
+    </button>
   );
 }
 
@@ -427,7 +624,30 @@ function useTrace(id: string | null, setTrace: (s: string[]) => void, setTracing
 // ─── 5. Work Planner ───
 
 function WorkPlanner() {
-  const { nodes, loading } = useTypedNodes("work_package");
+  const { nodes, loading, reload } = useTypedNodes("work_package");
+  const [gate, setGate] = useState<Record<string, GateResult>>({});
+
+  const commitWp = async (id: string) => {
+    try {
+      const res = await api.commitWorkPackage(id);
+      setGate((g) => ({ ...g, [id]: res }));
+      reload();
+    } catch {
+      setGate((g) => ({ ...g, [id]: { status: "blocked", failed_gates: ["unreachable"] } }));
+    }
+  };
+
+  const scheduleWp = async (w: GraphNode) => {
+    try {
+      const pomos = Number(fmString(w, "pomos")) || 1;
+      await api.scheduleTimebox(w.id, pomos, `Execution for ${nodeTitle(w)}`);
+      reload();
+      alert(`Scheduled ${pomos}-pomo timebox for work package!`);
+    } catch (e) {
+      alert("Failed to schedule timebox: " + e);
+    }
+  };
+
   if (loading) return <PageWithHead kicker="EXECUTION" title="Work / Timebox Planner"><LoadingRow label="work packages" /></PageWithHead>;
   return (
     <PageWithHead kicker="EXECUTION" title="Work / Timebox Planner" sub="No timebox = not committed (INV-TIME). A wish, not work.">
@@ -444,13 +664,28 @@ function WorkPlanner() {
                     <Badge variant={committed ? "gate-ok" : "gate-warn"}>{status || "Intent"}</Badge>
                     <span className="text-sm font-medium">{nodeExcerpt(w)}</span>
                   </div>
-                  <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+                  <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                     <PomoCostBadge pomos={Number(fmString(w, "pomos")) || 0} />
                     {fmFilled(w, "linked_bet") && <Badge variant="outline" className="text-[10px]">bet: {fmString(w, "linked_bet").slice(0, 12)}</Badge>}
                     {committed
                       ? <Badge variant="gate-ok" className="text-[10px]">▣ timebox committed</Badge>
                       : <Badge variant="gate-warn" className="border-dashed text-[10px]">◇ no timebox — it's a wish</Badge>}
+                    <div className="ml-auto flex items-center gap-2">
+                      {!committed && (
+                        <Button size="sm" variant="outline" onClick={() => commitWp(w.id)}>
+                          Commit [INV-WORK]
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" onClick={() => scheduleWp(w)}>
+                        Schedule Timebox [INV-TIME]
+                      </Button>
+                    </div>
                   </div>
+                  {gate[w.id] && (
+                    <div className="mt-2">
+                      <GateStatusBadge gate={gate[w.id]} />
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             );
@@ -464,26 +699,85 @@ function WorkPlanner() {
 // ─── 6. Execution Runbook ───
 
 function ExecutionRunbook() {
-  const { nodes, loading } = useTypedNodes("timebox");
+  const { nodes, loading, reload } = useTypedNodes("timebox");
+  const [captures, setCaptures] = useState<string[]>([]);
+  const [reviewResult, setReviewResult] = useState<string | null>(null);
+
   const active = nodes.find((t) => fmString(t, "status").toLowerCase() === "committed");
+
+  const capture = (type: string) => {
+    const text = prompt(`Enter ${type} details:`);
+    if (!text) return;
+    const entry = `[${type.toUpperCase()}] ${text} (${new Date().toLocaleTimeString()})`;
+    setCaptures((prev) => [...prev, entry]);
+  };
+
+  const handleReview = async () => {
+    if (!active) return;
+    try {
+      const res = await api.reviewTimebox(active.id, 1, [], "Next cycle planned", "full");
+      setReviewResult(res.gate.status === "approved" ? "Timebox review verified and completed [INV-REVIEW]!" : "Review gate blocked");
+      reload();
+    } catch (e) {
+      setReviewResult("Review failed: " + e);
+    }
+  };
+
+  const handleQuickSchedule = async () => {
+    try {
+      await api.scheduleTimebox("demo-wp", 1, "Quick execution block");
+      reload();
+    } catch (e) {
+      alert("Failed to schedule timebox: " + e);
+    }
+  };
+
   if (loading) return <PageWithHead kicker="EXECUTION" title="Execution Runbook"><LoadingRow label="timeboxes" /></PageWithHead>;
   return (
     <PageWithHead kicker="EXECUTION" title="Execution Runbook" sub="Low-decision mode. Capture ideas, don't mutate strategy mid-execution (INV-EXEC).">
       {active ? (
-        <div className="grid grid-cols-2 gap-4">
-          <Panel title="Work Package"><p className="text-sm font-mono">{fmString(active, "work_package")}</p></Panel>
-          <Panel title="Expected Output"><p className="text-sm">{fmString(active, "expected_output") || "—"}</p></Panel>
-          <Panel title="Method"><p className="text-sm">Build the smallest end-to-end path; capture ideas in the bar below.</p></Panel>
-          <Panel title="Capture Bar">
-            <div className="flex gap-2">
-              <Button size="sm" variant="ghost">💡 Idea</Button>
-              <Button size="sm" variant="ghost">⚠ Blocker</Button>
-              <Button size="sm" variant="ghost">⚡ Exception</Button>
-              <Button size="sm" variant="outline">📎 Attach Evidence</Button>
+        <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-4">
+            <Panel title="Work Package"><p className="text-sm font-mono">{fmString(active, "work_package")}</p></Panel>
+            <Panel title="Expected Output"><p className="text-sm">{fmString(active, "expected_output") || "—"}</p></Panel>
+            <Panel title="Method"><p className="text-sm">Build the smallest end-to-end path; capture ideas in the bar below.</p></Panel>
+            <Panel title="Capture Bar">
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="ghost" onClick={() => capture("idea")}>💡 Idea</Button>
+                <Button size="sm" variant="ghost" onClick={() => capture("blocker")}>⚠ Blocker</Button>
+                <Button size="sm" variant="ghost" onClick={() => capture("exception")}>⚡ Exception</Button>
+                <Button size="sm" variant="outline" onClick={() => capture("evidence")}>📎 Attach Evidence</Button>
+              </div>
+              {captures.length > 0 && (
+                <div className="mt-3 flex flex-col gap-1 border-t pt-2 font-mono text-xs text-muted-foreground">
+                  {captures.map((c, i) => <div key={i}>{c}</div>)}
+                </div>
+              )}
+            </Panel>
+          </div>
+
+          <Panel title="Verification & Review (INV-REVIEW)">
+            <div className="flex items-center gap-3">
+              <Button size="sm" variant="outline" onClick={handleReview}>
+                Complete Timebox Review [INV-REVIEW]
+              </Button>
+              {reviewResult && <span className="text-xs font-mono text-gate-ok">{reviewResult}</span>}
             </div>
           </Panel>
         </div>
-      ) : <EmptyState noun="committed timebox" hint="schedule one (POST /api/timeboxes)" />}
+      ) : (
+        <Card>
+          <CardContent className="py-8 text-center">
+            <p className="text-muted-foreground">No committed timebox active.</p>
+            <p className="mt-1 text-xs text-faint">Commit a work package or start a timebox to enter execution mode.</p>
+            <div className="mt-4">
+              <Button size="sm" variant="outline" onClick={handleQuickSchedule}>
+                Schedule 1-Pomo Timebox Now [INV-TIME]
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </PageWithHead>
   );
 }
@@ -519,7 +813,19 @@ function DaynoteLedger() {
 // ─── 8. VRD / Value ───
 
 function VrdView() {
-  const { nodes, loading } = useTypedNodes("value_claim");
+  const { nodes, loading, reload } = useTypedNodes("value_claim");
+  const [gate, setGate] = useState<Record<string, GateResult>>({});
+
+  const validate = async (id: string) => {
+    try {
+      const res = await api.validateValue(id);
+      setGate((prev) => ({ ...prev, [id]: res }));
+      reload();
+    } catch {
+      setGate((prev) => ({ ...prev, [id]: { status: "blocked", failed_gates: ["validation_error"] } }));
+    }
+  };
+
   if (loading) return <PageWithHead kicker="LEARNING" title="VRD / Value Realization"><LoadingRow label="value claims" /></PageWithHead>;
   return (
     <PageWithHead kicker="LEARNING" title="VRD / Value Realization" sub="Weak claims surface as DEBT, never smoothed. INV-VALUE.">
@@ -538,6 +844,12 @@ function VrdView() {
                     <p className="text-sm">{nodeExcerpt(v)}</p>
                     {!hasProof && <p className="text-xs text-gate-bad">PROOF DEBT: no evidence links (INV-VALUE)</p>}
                   </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <Button size="sm" variant="outline" onClick={() => validate(v.id)}>
+                      Validate [INV-VALUE]
+                    </Button>
+                    <GateStatusBadge gate={gate[v.id] ?? null} />
+                  </div>
                 </CardContent>
               </Card>
             );
@@ -552,9 +864,20 @@ function VrdView() {
 
 function AgentDraftInbox() {
   const { nodes, loading, reload } = useTypedNodes("agent_run");
+  const [reviewer, setReviewer] = useState("Strategist");
+
   if (loading) return <PageWithHead kicker="GOVERNANCE" title="Agent Draft Inbox"><LoadingRow label="agent runs" /></PageWithHead>;
   return (
     <PageWithHead kicker="GOVERNANCE" title="Agent Draft Inbox" sub="INV-HUMAN: agent output is draft-only until a human approves.">
+      <div className="mb-3 flex items-center gap-2 text-xs">
+        <span className="text-muted-ink">Reviewer:</span>
+        <input
+          value={reviewer}
+          onChange={(e) => setReviewer(e.target.value)}
+          placeholder="Reviewer name"
+          className="w-32 rounded border bg-surface-2 px-2 py-1 text-xs"
+        />
+      </div>
       {nodes.length === 0 ? <EmptyState noun="agent drafts" /> : (
         <div className="flex flex-col gap-2">
           {nodes.map((a) => (
@@ -569,7 +892,7 @@ function AgentDraftInbox() {
                   <p className="text-[11px] text-muted-ink">No auto-accept; reviewer required.</p>
                 </div>
                 <div className="flex flex-col gap-1">
-                  <Button size="sm" variant="outline" onClick={async () => { try { await api.acceptAgentRun(a.id, "Sam"); reload(); } catch {} }}>Accept (Sam)</Button>
+                  <Button size="sm" variant="outline" onClick={async () => { try { await api.acceptAgentRun(a.id, reviewer); reload(); } catch {} }}>Accept ({reviewer})</Button>
                   <Button size="sm" variant="ghost" onClick={async () => { try { await api.rejectAgentRun(a.id); reload(); } catch {} }}>Reject</Button>
                 </div>
               </CardContent>

@@ -44,6 +44,15 @@ async function exportBundle() {
   URL.revokeObjectURL(url);
 }
 
+const TYPE_FILTERS = [
+  { id: "all", label: "All" },
+  { id: "note", label: "Notes" },
+  { id: "evidence_item", label: "Evidence" },
+  { id: "strategic_claim", label: "Claims" },
+  { id: "strategy_bet", label: "Bets" },
+  { id: "work_package", label: "Work" },
+] as const;
+
 export function NotesScreen({
   onSelectView,
   initialNoteId,
@@ -53,7 +62,9 @@ export function NotesScreen({
 }) {
   const store = useNotes();
   const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
   const [activeId, setActiveId] = useState<string | null>(initialNoteId ?? null);
+  const [ftsIds, setFtsIds] = useState<string[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Import OKF concept files: parse each → create typed nodes (gate-safe;
@@ -92,16 +103,43 @@ export function NotesScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialNoteId]);
 
+  // Debounced SQLite FTS5 search query
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setFtsIds(null);
+      return;
+    }
+    let cancelled = false;
+    const timeout = setTimeout(() => {
+      api.search(q).then((results) => {
+        if (!cancelled) {
+          setFtsIds(results.map((r) => r.id));
+        }
+      }).catch(() => {});
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [query]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const match = (n: GraphNode) => {
-      const title = fmString(n, "title").toLowerCase();
-      const body = (n.body ?? "").toLowerCase();
-      return title.includes(q) || body.includes(q);
-    };
-    const list = q ? store.notes.filter(match) : store.notes;
+    let list = store.notes;
+    if (typeFilter !== "all") {
+      list = list.filter((n) => n.type === typeFilter);
+    }
+    if (q) {
+      list = list.filter((n) => {
+        if (ftsIds && ftsIds.includes(n.id)) return true;
+        const title = fmString(n, "title").toLowerCase();
+        const body = (n.body ?? "").toLowerCase();
+        return title.includes(q) || body.includes(q);
+      });
+    }
     return list.slice(0, 100);
-  }, [store.notes, query]);
+  }, [store.notes, query, typeFilter, ftsIds]);
 
   const mentionCandidates: MentionResult[] = useMemo(
     () => store.notes.slice(0, 50).map((n) => ({ id: n.id, title: fmString(n, "title"), preview: (n.body ?? "").slice(0, 60) })),
@@ -138,7 +176,7 @@ export function NotesScreen({
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search notes…"
+                  placeholder="Search notes (FTS5)…"
                   className="w-full rounded-md border bg-surface-2 py-1.5 pl-7 pr-2 text-sm outline-none focus:border-primary"
                 />
               </div>
@@ -158,6 +196,25 @@ export function NotesScreen({
                 onChange={(e) => { if (e.target.files?.length) void importOkf(e.target.files); e.target.value = ""; }}
               />
             </div>
+
+            {/* type filter bar */}
+            <div className="flex flex-wrap gap-1 border-b bg-surface-1 px-2 py-1.5">
+              {TYPE_FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => setTypeFilter(f.id)}
+                  className={cn(
+                    "rounded px-2 py-0.5 text-[11px] font-medium transition-colors",
+                    typeFilter === f.id
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-surface-2 text-muted-foreground hover:bg-secondary hover:text-foreground",
+                  )}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
             <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
               {store.loading && <p className="px-2 py-3 text-sm text-muted-ink">Loading…</p>}
               {!store.loading && filtered.length === 0 && (
@@ -186,7 +243,11 @@ export function NotesScreen({
                 onChange={(body) => store.patch(active.id, body)}
                 onTitleChange={(title) => store.patch(active.id, active.body ?? "", title)}
                 onSave={(body) => store.save(active.id, body)}
-                onPromote={(newId) => { setActiveId(newId); store.reload(); }}
+                onPromote={(newId, newType) => {
+                  if (newType) store.retype(newId, newType);
+                  setActiveId(newId);
+                  void store.reload();
+                }}
                 onOpenNote={(t) => {
                   const found = store.notes.find((n) => fmString(n, "title").toLowerCase() === t.toLowerCase() || n.id === t);
                   if (found) setActiveId(found.id);
@@ -219,6 +280,25 @@ export function NotesScreen({
           node={active}
           onNavigateNote={select}
           onNewNote={create}
+          onLinkItem={() => {
+            if (active) {
+              const link = `[[${fmString(active, "title") || active.id}]]`;
+              navigator.clipboard?.writeText(link);
+              alert(`Copied link ${link} to clipboard! Paste it into any note.`);
+            }
+          }}
+          onAddToGraph={() => {
+            if (active) onSelectView("trace");
+          }}
+          onShare={async () => {
+            if (active) {
+              const text = `# ${fmString(active, "title") || "Untitled"}\n\n${active.body ?? ""}`;
+              await navigator.clipboard?.writeText(text);
+              alert("Note copied to clipboard as Markdown!");
+            } else {
+              void exportBundle();
+            }
+          }}
           onLinked={() => store.reload()}
         />
       }
@@ -248,17 +328,24 @@ function NoteListCard({
         active ? "border-primary/50 bg-surface-2" : "border-transparent hover:bg-surface-2",
       )}
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-1.5">
         <span className="truncate text-sm font-medium">{fmString(note, "title") || "Untitled"}</span>
-        <span
-          role="button"
-          tabIndex={0}
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); onDelete(); } }}
-          className="shrink-0 text-faint hover:text-destructive"
-        >
-          <Trash2 className="size-3.5" />
-        </span>
+        <div className="flex items-center gap-1 shrink-0">
+          {note.type !== "note" && (
+            <span className="rounded bg-surface-3 px-1.5 py-0.5 text-[9px] font-mono uppercase text-muted-ink">
+              {note.type.replace(/_/g, " ")}
+            </span>
+          )}
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); onDelete(); } }}
+            className="text-faint hover:text-destructive"
+          >
+            <Trash2 className="size-3.5" />
+          </span>
+        </div>
       </div>
       <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-ink">{(note.body ?? "").slice(0, 80) || "Empty note"}</p>
       {(tags.length > 0 || wikilinks.length > 0) && (

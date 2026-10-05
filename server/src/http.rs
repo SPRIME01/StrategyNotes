@@ -58,6 +58,9 @@ pub async fn serve(data_dir: &Path, port: u16) -> Result<(), Box<dyn std::error:
         clock: SystemClock,
     });
 
+    // Synchronize SQLite index with markdown vault once on startup (INV-DUR)
+    state.index.rebuild(&state.vault)?;
+
     let app = Router::new()
         .route("/api/health", get(health))
         .route("/api/node/:id", get(get_node).patch(patch_node))
@@ -85,7 +88,7 @@ pub async fn serve(data_dir: &Path, port: u16) -> Result<(), Box<dyn std::error:
         .route("/api/timeboxes/:id/review", post(review_timebox))
         .route("/api/value-claims", post(claim_value))
         .route("/api/value-claims/:id/validate", post(validate_value))
-        .route("/api/agent-runs", get(list_agent_runs))
+        .route("/api/agent-runs", get(list_agent_runs).post(create_agent_run))
         .route("/api/agent-runs/:id", get(get_agent_run))
         .route("/api/agent-runs/:id/accept", post(accept_agent_run))
         .route("/api/agent-runs/:id/reject", post(reject_agent_run))
@@ -125,7 +128,6 @@ async fn list_nodes_by_type(
     State(st): State<Arc<ServerState>>,
     AxumPath(ty): AxumPath<String>,
 ) -> Result<Json<Vec<String>>, AppError> {
-    st.index.rebuild(&st.vault)?;
     let nt: NodeType = from_snake_case(&ty)?;
     let ids = st.index.nodes_by_type(nt)?;
     Ok(Json(ids.into_iter().map(|i| i.to_lexical()).collect()))
@@ -144,6 +146,7 @@ async fn create_note(
     Json(b): Json<CreateNoteBody>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let node = st.app().create_note(b.title, b.body.unwrap_or_default())?;
+    st.index.rebuild(&st.vault)?;
     Ok(Json(serde_json::to_value(&node)?))
 }
 
@@ -187,6 +190,7 @@ async fn create_node(
         None => Default::default(),
     };
     let node = st.app().create_node(ty, fm, b.body.unwrap_or_default())?;
+    st.index.rebuild(&st.vault)?;
     Ok(Json(serde_json::to_value(&node)?))
 }
 
@@ -234,6 +238,7 @@ async fn delete_note(
     AxumPath(id): AxumPath<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     st.app().delete_note(NodeId::parse(&id)?)?;
+    st.index.rebuild(&st.vault)?;
     Ok(Json(serde_json::json!({"deleted": id})))
 }
 
@@ -321,8 +326,6 @@ async fn create_case(
 async fn list_cases(
     State(st): State<Arc<ServerState>>,
 ) -> Result<Json<Vec<String>>, AppError> {
-    // Rebuild the index first so queries reflect current vault state.
-    st.index.rebuild(&st.vault)?;
     let ids = st
         .index
         .nodes_by_type(strategynotes_core::node::NodeType::StrategyCase)?;
@@ -525,10 +528,34 @@ async fn validate_value(
 
 // ---- agent runs (INV-HUMAN quarantine) ----
 
+#[derive(Deserialize)]
+struct CreateAgentRunBody {
+    agent: String,
+    summary: String,
+    completed: Option<bool>,
+}
+
+async fn create_agent_run(
+    State(st): State<Arc<ServerState>>,
+    Json(b): Json<CreateAgentRunBody>,
+) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
+    let mut run = st.app().create_agent_run(b.agent, b.summary)?;
+    if b.completed.unwrap_or(true) {
+        run = st.app().complete_agent_run(run.id)?;
+    }
+    st.index.rebuild(&st.vault)?;
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "id": run.id.to_lexical(),
+            "status": run.status,
+        })),
+    ))
+}
+
 async fn list_agent_runs(
     State(st): State<Arc<ServerState>>,
 ) -> Result<Json<Vec<String>>, AppError> {
-    st.index.rebuild(&st.vault)?;
     let ids = st.index.nodes_by_type(strategynotes_core::node::NodeType::AgentRun)?;
     Ok(Json(ids.into_iter().map(|i| i.to_lexical()).collect()))
 }
@@ -583,7 +610,6 @@ async fn trace(
     AxumPath(id): AxumPath<String>,
 ) -> Result<Json<TraceResponse>, AppError> {
     let start = NodeId::parse(&id)?;
-    st.index.rebuild(&st.vault)?;
     let reach = reachable_via_spine(&st.index, start)?;
     Ok(Json(TraceResponse {
         reachable: reach.into_iter().map(|n| n.to_lexical()).collect(),
@@ -599,7 +625,6 @@ async fn search(
     State(st): State<Arc<ServerState>>,
     axum::extract::Query(q): axum::extract::Query<SearchQuery>,
 ) -> Result<Json<Vec<strategynotes_core::search::SearchResult>>, AppError> {
-    st.index.rebuild(&st.vault)?;
     Ok(Json(st.index.search(&q.q)?))
 }
 

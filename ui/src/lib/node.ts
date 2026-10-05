@@ -55,14 +55,15 @@ export function nodeTitle(node: GraphNode): string {
 
 /** Short text/excerpt for list cards: frontmatter.text/statement/thesis → body. */
 export function nodeExcerpt(node: GraphNode, n = 120): string {
-  const text =
+  const raw =
     fmString(node, "text") ||
     fmString(node, "statement") ||
     fmString(node, "thesis") ||
     fmString(node, "objective") ||
     fmString(node, "summary") ||
     (node.body ?? "");
-  return text.length > n ? text.slice(0, n) + "…" : text;
+  const text = raw.replace(/^#+\s+/gm, "").replace(/(?:^|\s+)#+\s*/g, " ").replace(/\n+/g, " ").trim();
+  return text.length > n ? text.slice(0, n) + "…" : text || "—";
 }
 
 /** Excerpt for a backlink/preview, trimmed to one line. */

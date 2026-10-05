@@ -66,18 +66,33 @@ export const api = {
   createWorkPackage: (caseId: string, linkedBet: string, objective: string) =>
     call<WithId>("POST", "/api/work-packages", { case: caseId, linked_bet: linkedBet, objective }),
   commitWorkPackage: (id: string) => call<GateResult>("POST", `/api/work-packages/${id}/commit`),
-  scheduleTimebox: (workPackage: string, pomos: number, expectedOutput: string) =>
-    call<WithId>("POST", "/api/timeboxes", {
+  scheduleTimebox: (
+    workPackage: string,
+    pomos: number,
+    expectedOutput: string,
+    start?: string,
+    end?: string,
+  ) => {
+    const s = start ?? new Date().toISOString();
+    const e = end ?? new Date(Date.now() + Math.max(1, pomos) * 25 * 60 * 1000).toISOString();
+    return call<WithId>("POST", "/api/timeboxes", {
       work_package: workPackage,
       pomos,
-      start: "2026-07-01T13:00:00Z",
-      end: "2026-07-01T14:00:00Z",
+      start: s,
+      end: e,
       expected_output: expectedOutput,
-    }),
-  reviewTimebox: (id: string, actualPomos: number, evidenceLinks: string[], nextAction: string) =>
+    });
+  },
+  reviewTimebox: (
+    id: string,
+    actualPomos: number,
+    evidenceLinks: string[],
+    nextAction: string,
+    completion: string = "full",
+  ) =>
     call<{ gate: GateResult }>("POST", `/api/timeboxes/${id}/review`, {
       actual_pomos: actualPomos,
-      completion: "partial",
+      completion,
       evidence_links: evidenceLinks,
       next_action: nextAction,
     }),

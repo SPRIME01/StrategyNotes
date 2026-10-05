@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "../../api";
-import { useTypedNodes } from "../../hooks/useTypedNodes";
+import { useAllStrategyNodes } from "../../hooks/useTypedNodes";
 import { fmString, nodeTitle } from "../../lib/node";
 import { Copy, Check } from "lucide-react";
 
@@ -16,7 +16,7 @@ export function CloneSection({
   id: string | null;
   onCloned?: () => void;
 }) {
-  const { nodes } = useTypedNodes("note");
+  const { nodes } = useAllStrategyNodes();
   const [placements, setPlacements] = useState<string[]>([]);
   const [target, setTarget] = useState("");
   const [busy, setBusy] = useState(false);
@@ -62,8 +62,8 @@ export function CloneSection({
           className="flex-1 rounded border bg-surface-2 px-2 py-1 text-xs"
         >
           <option value="">clone into…</option>
-          {nodes.filter((n) => n.id !== id).slice(0, 50).map((n) => (
-            <option key={n.id} value={n.id}>{fmString(n, "title") || nodeTitle(n)}</option>
+          {nodes.filter((n) => n.id !== id).slice(0, 100).map((n) => (
+            <option key={n.id} value={n.id}>[{n.type}] {fmString(n, "title") || nodeTitle(n)}</option>
           ))}
         </select>
         <button
@@ -82,7 +82,7 @@ export function CloneSection({
 }
 
 function PlacementRow({ id }: { id: string }) {
-  const { nodes } = useTypedNodes("note");
+  const { nodes } = useAllStrategyNodes();
   const found = nodes.find((n) => n.id === id);
   return (
     <div className="font-mono text-[10px] text-primary">
