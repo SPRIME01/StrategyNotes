@@ -8,7 +8,7 @@ use std::collections::HashSet;
 
 use crate::error::Error;
 use crate::identity::NodeId;
-use crate::node::EdgeType;
+use crate::node::{EdgeType, Node};
 use crate::ports::DerivedIndex;
 
 /// Would adding the placement edge `parent --places--> child` create a cycle in
@@ -46,4 +46,50 @@ pub fn would_create_placement_cycle(
         }
     }
     Ok(false)
+}
+
+/// Every node whose frontmatter still names `target`, excluding `target` itself.
+///
+/// Guards deletion (INV-DUR): removing a node that other nodes point at orphans
+/// those pointers, and a dangling ULID in markdown is unrecoverable state — the
+/// vault is not in git, and the SQLite index is disposable by design, so nothing
+/// downstream can repair it.
+///
+/// Match is exact on the lexical ULID, so a longer token that merely *starts*
+/// with the target does not count. Self-references are ignored, otherwise any
+/// node that mentions its own id could never be deleted.
+///
+/// Pure over `&[Node]` so it runs with no I/O and no index.
+pub fn referencing_nodes(nodes: &[Node], target: NodeId) -> Vec<NodeId> {
+    let want = target.to_lexical();
+    nodes
+        .iter()
+        .filter(|n| n.id != target)
+        .filter(|n| {
+            let mut hit = false;
+            for v in n.frontmatter.values() {
+                names(v, &want, &mut hit);
+                if hit {
+                    break;
+                }
+            }
+            hit
+        })
+        .map(|n| n.id)
+        .collect()
+}
+
+/// Depth-first over a YAML value, flagging an exact string match. Recurses
+/// through sequences and mappings so `linked_bet:`, `assumptions: [...]` and
+/// `edges: [{to: ...}]` are all covered (INV-EDGE: edges live in frontmatter).
+fn names(v: &serde_yaml::Value, want: &str, hit: &mut bool) {
+    if *hit {
+        return;
+    }
+    match v {
+        serde_yaml::Value::String(s) => *hit = s == want,
+        serde_yaml::Value::Sequence(items) => items.iter().for_each(|i| names(i, want, hit)),
+        serde_yaml::Value::Mapping(map) => map.values().for_each(|i| names(i, want, hit)),
+        _ => {}
+    }
 }

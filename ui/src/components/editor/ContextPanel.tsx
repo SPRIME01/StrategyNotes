@@ -1,10 +1,10 @@
-// TASK-E04 — Context panel. Collapsible container (open/closed state owned by
-// EditorLayout) composing the Linked, Quick Actions, and Proof Burden sections
-// for the currently active note. Proof Burden (SPEC §11.4) replaces the old
-// static "Core Concepts" section — it reads the node's typed edges.
+// Context panel — collapsible container (state owned by EditorLayout) composing
+// the sections of the Proof Burden for the active note.
+//
+// Section order is by frequency of use (DESIGN.md §9). Quick Actions was last,
+// which meant it fell off the bottom of the panel on a 900px-tall window.
 
 import type { ReactNode } from "react";
-import { SectionLabel } from "../../atoms";
 import { LinkedSection } from "./LinkedSection";
 import { QuickActionsSection } from "./QuickActionsSection";
 import { ProofBurdenPanel } from "./ProofBurdenPanel";
@@ -18,12 +18,13 @@ export interface ContextPanelProps {
   onLinkItem?: () => void;
   onAddToGraph?: () => void;
   onShare?: () => void;
-  /** Notify parent to reload after an edge is created (Proof Burden refresh). */
+  /** Notify parent to reload after an edge is created. */
   onLinked?: () => void;
-  /** Override sections for testing or composition. */
+  /** Override sections for composition or testing. */
   linked?: ReactNode;
   actions?: ReactNode;
   proof?: ReactNode;
+  clones?: ReactNode;
 }
 
 export function ContextPanel({
@@ -37,28 +38,39 @@ export function ContextPanel({
   linked,
   actions,
   proof,
+  clones,
 }: ContextPanelProps) {
   return (
-    <div className="flex flex-col gap-3 p-3">
-      <SectionLabel>Linked</SectionLabel>
-      {linked ?? (node
-        ? <LinkedSection noteId={node.id} onNavigate={onNavigateNote} />
-        : <EmptyHint>No note selected.</EmptyHint>)}
+    <div className="flex flex-col gap-5 p-3">
+      <section>
+        {proof ?? <ProofBurdenPanel node={node} onLinked={onLinked} />}
+      </section>
 
-      <SectionLabel>Proof Burden</SectionLabel>
-      {proof ?? <ProofBurdenPanel node={node} onLinked={onLinked} />}
+      <section className="flex flex-col gap-1.5">
+        <h2 className="t-label text-muted-ink">Linked here</h2>
+        {linked ??
+          (node ? (
+            <LinkedSection noteId={node.id} onNavigate={onNavigateNote} />
+          ) : (
+            <p className="t-body text-muted-foreground">No note selected.</p>
+          ))}
+      </section>
 
-      <SectionLabel>Clones</SectionLabel>
-      <CloneSection id={node?.id ?? null} onCloned={onLinked} />
+      <section>
+        {clones ?? <CloneSection id={node?.id ?? null} onCloned={onLinked} />}
+      </section>
 
-      <SectionLabel>Quick Actions</SectionLabel>
-      {actions ?? (
-        <QuickActionsSection onNewNote={onNewNote} onLinkItem={onLinkItem} onAddToGraph={onAddToGraph} onShare={onShare} />
-      )}
+      <section className="flex flex-col gap-1.5">
+        <h2 className="t-label text-muted-ink">Quick actions</h2>
+        {actions ?? (
+          <QuickActionsSection
+            onNewNote={onNewNote}
+            onLinkItem={onLinkItem}
+            onAddToGraph={onAddToGraph}
+            onShare={onShare}
+          />
+        )}
+      </section>
     </div>
   );
-}
-
-function EmptyHint({ children }: { children: ReactNode }) {
-  return <p className="text-xs text-muted-foreground">{children}</p>;
 }

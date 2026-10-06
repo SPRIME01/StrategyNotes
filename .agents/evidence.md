@@ -1472,3 +1472,533 @@ live API checks:
 
 Status: Accepted
 
+
+## EV-025 — Deletion safety, Work/Timebox truth, and honest failure toasts
+
+Date: 2026-10-06
+Slices: S-DESTROY-001 (reference-guarded delete), S-WORK-001 (pomo estimate + derived timeboxes)
+Agent: main (opencode/mimo-v2.6-flash-free)
+Spec IDs: PRD-019, PRD-020, PRD-002, PRD-005; SDS-WORK, SDS-TIME, SDS-GRAPH, SDS-STORAGE;
+INV-DUR, INV-EDGE, INV-TIME, INV-WORK, INV-PORT.
+
+### Problem (found by probing the running app, not by reading code)
+
+1. `DELETE /api/notes/:id` removed whatever id it was handed. A probe destroyed the approved
+   bet "One-day onboarding as wedge", orphaning 4 references (2 × `linked_bet`, 2 edges).
+   The vault is gitignored and SQLite is disposable by design, so the orphaning was
+   **unrecoverable** — the node had to be reconstructed from `core/src/seed/strategy.rs`.
+2. `WorkPlanner.hasTimebox` read the work package's own `status`, which no scheduling endpoint
+   ever set. Every row stayed "no timebox, a wish" after a successful reservation, and the
+   vault's 4 real timeboxes were invisible to the view.
+3. No UI could set a pomo estimate (`PRD-019`), so `Timebox` could never be reached honestly.
+4. `useNotes.remove` swallowed failures while `NotesScreen` toasted "Deleted" unconditionally —
+   a destructive action reporting success for a refused operation.
+
+### What shipped
+
+- **`core/src/graph.rs`** — `referencing_nodes(nodes, target)`: scans scalar frontmatter
+  references, list members, and edge targets; ignores self-references and partial-ULID
+  matches. 6 tests in `core/tests/graph.rs` (suite 12/12).
+- **`core/src/services.rs::delete_note`** — refuses while any node still names the target.
+  Refusal names nodes by **title**, not ULID, and ends with the action to take.
+- **`adapters/tests/deletion.rs`** (new) — real `MarkdownVault` + `DaynoteEventSink` harness:
+  referenced node refused & survives; unreferenced node deletes.
+- **`useNotes.remove`** — returns `String | null`; the caller branches. Deliberately does NOT
+  set the view-level `error`, which blanks the entire Notes list on a refused delete.
+- **`NotesScreen`** — `ConfirmButton` (arm/confirm/Keep) replaces the one-click trash;
+  refusal toast runs through `readableError()` which strips `NNN ` and
+  `contract violation: ` prefixes (log detail, not user copy).
+- **`atoms.tsx::ConfirmButton`** — gained `size` + `ariaLabel` so the primitive works as an
+  icon-only row affordance; `children` is an icon, so the button must still announce itself.
+- **`WorkPlanner`** — timebox truth is now **derived from timebox nodes** (`work_package`
+  frontmatter → map), never asserted from WP status. Adds an editable pomo estimate
+  (PATCH `frontmatter.pomos`; `status` stripped server-side so no gate can be bypassed),
+  disables `Timebox` when the estimate is unset, persists the estimate as part of
+  scheduling, and shows the reserved window + its pomo cost read from the timebox.
+
+### Verification
+
+```text
+cargo test --workspace (all suites except calendar/providers.rs — pre-existing network hang):
+  123 passed, 0 failed
+cargo clippy --workspace --all-targets -- -D warnings: clean
+pnpm -C ui typecheck: clean
+pnpm -C ui test: 12 files, 69 passed, 0 failed
+pnpm -C ui build: clean (1,112.56 kB / 334.79 kB gzip, 39.87s)
+```
+
+Live app (Playwright, `http://127.0.0.1:5173`):
+
+```text
+Work view:   3 rows · 2 "timebox reserved" with real windows
+             ("Oct 5, 08:27 PM → Oct 5, 09:42 PM (3p)") · 1 "no timebox, a wish"
+             · 3 editable estimate inputs · h1=1 · overflow=false · clip=0
+             · 0 console errors on a clean load
+Delete path: arm → confirm on the referenced bet
+             → HTTP 400, node survives (42 nodes unchanged, status still approved)
+             → toast: "cannot delete "One-day onboarding as wedge": it is still linked from
+               4 other node(s) (Red-team the speed thesis, Strategy notes (demo),
+               Ship one-day onboarding) — remove those links first"
+             → list still shows 22 rows (not blanked)
+Vault integrity: 42 nodes, 0 dangling references, SDR 01KW054BQ6S6KYAQYSVQCBQPT3 intact.
+```
+
+### Known limitations recorded, not silently absorbed
+
+- `can_commit_work_package` still does not check `pomos` (SPEC §515 says it should). Left
+  as-is by explicit operator decision; recorded as an OPEN_QUESTION naming PRD-020 / SDS-TIME.
+- Seed work packages carry timeboxes with estimates (3p/2p/6p) while the WPs themselves have
+  no `pomos` field, so those rows read "estimate" next to a reserved window. Display-only
+  `(3p)` from the timebox makes the reserved cost visible; the UI does not write data on read.
+- 2 of 4 timeboxes point at the same work package; the view shows the first one per WP.
+- 404 vs idempotent delete for an unknown id was left as `Ok` (vault.delete is idempotent by
+  design); changing it would be inventing policy, not fixing this defect.
+
+Status: Accepted
+
+## EV-026 — Wiki-style interlinking (S-LINK-001, frontend)
+
+Date: 2026-10-06
+Slice: S-LINK-001 — clickable statuses, types and tags; every node addressable
+Agent: main (opencode/mimo-v2.6-flash-free)
+Spec IDs: PRD-001, PRD-002, PRD-005, PRD-019; SDS-GRAPH, SDS-UI, SDS-NODE;
+INV-DUR, INV-EDGE, INV-PORT, INV-BODY, INV-HUMAN.
+
+### What shipped
+
+Two derived routes, added to the existing hash router (no router dependency —
+DESIGN.md §7 keeps `useHashRoute` and eleven views without react-router):
+
+```
+#facet/<dim>/<value>   dim ∈ {status, type, tag}   everything carrying it
+#node/<ulid>                                    one node, references both ways
+```
+
+- **`App.tsx`** — `parseDerived(route)` runs before the `VALID` fallback. A
+  derived page renders inside the shell (Back, rail, workspace bar all still
+  work) but the rail keeps `cockpit` current, because neither is a place you
+  navigate *to* — you arrive by following a link.
+- **`views/FacetPage.tsx`** (new) — reads `GET /api/nodes`, filters, renders.
+  It has **no create/edit/delete affordance at all**, so it cannot violate
+  INV-DUR; everything it shows already exists in frontmatter or the body.
+  Exports `facetHref` / `facetHrefOr` / `nodeHref` used by every other view.
+- **`views/NodePage.tsx`** (new) — title, type, status, tags, body, plus
+  **"Linked from"** and **"Points to"**. Both are computed from markdown
+  frontmatter (`nodeRefs` / `nodesReferencing`), never from SQLite — INV-EDGE.
+- **`lib/node.ts`** — `nodeRefs`, `nodesReferencing`, `tagsOf`. Tags come from
+  inline `#hashtags` in the body via the existing `/#([\w-]+)/g` rule; there is
+  **no `tags` frontmatter key in the vault** (verified across all 42 nodes) and
+  none was invented — INV-BODY: the body is authoritative for tags.
+- **`atoms.tsx`** — `NodeTypeChip`, `StatusChip`, `EvidenceStateBadge` gained an
+  optional `to`. Omitted, they render exactly the plain `<span>` every existing
+  call site already had, so the change is purely additive; given `to`, they
+  become real `<a>` anchors with `stopPropagation` so a chip inside a clickable
+  row cannot fire both.
+- **Views wired:** `WorkPlanner`, `BetBoard`, `EvidenceInbox`, `ValueView`,
+  `AgentDrafts`, `TraceExplorer` (chips + row bodies link to the node page);
+  `FacetPage` rows cross-link to the other facet dimensions. `GeneratedDoc` was
+  deliberately left alone — its excerpt is prose in a document view, not a row.
+  `NoteRow` was deliberately left alone: its chips are nested inside the row
+  `<button>`, and an anchor cannot nest in a button.
+- **`facetHrefOr`** exists because views routinely render a chip with a *default*
+  status ("draft", "intent") when the node has none — linking that would open a
+  facet page listing nothing. It returns `undefined` so the chip stays plain.
+
+### Also fixed in this pass (found by the sweep, not by reading code)
+
+`NoteEditor`'s `<h1>` wraps the title `<input>`, so the heading had **no
+accessible name** — a form control's value is not text content, so even a titled
+note produced an unnamed heading. The earlier UI-UX sweep asserted `h1=1` and
+would never have caught this. Now `aria-label={titleText || "Untitled note"}`,
+with the input keeping its own independent `aria-label`.
+
+### Verification
+
+```text
+cargo test --workspace (all suites except calendar/providers.rs — pre-existing network hang):
+  123 passed, 0 failed
+cargo clippy --workspace --all-targets -- -D warnings: 0 issues
+pnpm -C ui typecheck: clean
+pnpm -C ui test: 12 files, 69 passed, 0 failed
+pnpm -C ui build: clean (10.62s)
+```
+
+Live app (Playwright):
+
+```text
+Click-through:  #work → click "Intent" status chip → #facet/status/intent
+                h1 = "intent · status" · 0 JS errors
+Direct routes:  #facet/status/approved  → h1 "approved · status", the approved bet listed
+                #facet/type/work_package → 3 rows
+                #node/01KW054BPVV…      → h1 "One-day onboarding as wedge",
+                                          LINKED FROM (4 referrers by title) + POINTS TO,
+                                          7 node links, 3 cross-facet links
+Notes h1:       aria-label = "Oct 5th, 2026" (was: no accessible name)
+Responsive sweep at 375 / 768 / 1440 across
+  #work, #facet/status/approved, #facet/type/work_package, #node/…, #notes:
+                overflow=false, clip=0, h1=1 on every cell
+```
+
+### Known limitations recorded
+
+- `#facet/tag/…` has no seeded data yet: only 2 of 42 nodes carry a `#hashtag`.
+  The route, the filter and the empty state are implemented and the empty state
+  explains where tags come from ("inline `#hashtags` in a node's body — there is
+  no tag field to fill in").
+- The rail shows `cockpit` as current on derived pages; there is no dedicated
+  nav item for them, because they are reached by following links, not from the rail.
+- `NoteRow` chips are still plain spans (nested in a button). Making them links
+  requires restructuring the row first — noted in `.agents/next_steps.md`.
+
+Status: Accepted
+
+## EV-027 — Evidence rejection endpoint + ULID leak fix (S-EVID-001)
+
+Date: 2026-10-06
+Slice: S-EVID-001 — `POST /api/evidence/{id}/reject`; `nodeTitle` no longer leaks ULIDs
+Agent: main (opencode/mimo-v2.6-flash-free)
+Spec IDs: PRD-005, SDS-EVID, SDS-NODE, SDS-UI; INV-CONTRA, INV-HUMAN, INV-DUR, INV-DAY.
+
+### 1. The silent no-op
+
+`EvidenceInbox` **Reject** did
+`api.patchNode(id, { frontmatter: { status: "rejected" } })`.
+`services::update_node` strips `status` before merging (gate-owned), so the
+write succeeded, the toast said "Rejected", and **nothing changed**. The same
+shape was behind `BetBoard.kill` — see `.agents/open_questions.md` → `OQ-BET-KILL`.
+
+Spec §10.2 already lists `POST /evidence/{id}/reject` and §9 lists
+`EvidenceService | accept / reject evidence`, so this is a missing
+implementation, not missing policy — TDD, smallest failing test first.
+
+### 2. What shipped
+
+- `core/src/services.rs::reject_evidence` — loads the item, sets
+  `EvidenceStatus::Rejected`, persists, emits. **No gate**: rejecting demands
+  no proof, it declines one. Returns early if already rejected so a double
+  click cannot double-log.
+- **It does not discard.** INV-CONTRA requires counterevidence to survive as a
+  first-class record, so the node, its `text` and its typed edges all stand —
+  only status and the ledger move.
+- `ActivityKind::Rejected` added (`core/src/governance.rs`) with its
+  `"rejected"` arm in `adapters/src/daynote_sink.rs`. That match is exhaustive,
+  so the compiler forced the arm — there is no path where a rejection is
+  written to the daynote under a wrong label.
+- `server/src/http.rs` — route + handler, mirroring `accept_evidence`.
+- `ui/src/api.ts::rejectEvidence`; `EvidenceInbox.reject` now calls it.
+
+### 3. The ULID leak this uncovered
+
+The toast read `Rejected "01KW054BMNFRE8JC0G"`. `nodeTitle` fell back to
+`node.id.slice(0, 18)`, and evidence nodes carry no `title` and no body — their
+claim lives in frontmatter `text`. So every untitled typed node put a ULID into
+a human surface, including **`NodePage`'s h1 and `FacetPage` rows**, both added
+in EV-026.
+
+`DESIGN.md §10` keeps infrastructure identity off reading surfaces, and
+`useNodeTitle` already worked around this in one place by treating "the id
+fallback" as "no title". The fix belongs in `nodeTitle` itself:
+
+```
+title → first body line → nodeExcerpt(60) → id
+```
+
+The id survives only when the node has *no* human content at all, so
+`nodeTitle(node({}))` still returns the id and the existing test still passes.
+`lib/node.test.ts` gained a case for the `text`/`thesis` fallbacks.
+`useNodeTitle`'s comment was updated — it described the old behavior.
+
+### 4. Verification
+
+```text
+cargo test --workspace (all suites except calendar/providers.rs): 124 passed, 0 failed   (+1)
+cargo clippy --workspace --all-targets -- -D warnings:            0 issues
+pnpm -C ui typecheck:                                              clean
+pnpm -C ui test:                                                   12 files, 70 passed  (+1)
+pnpm -C ui build:                                                  clean
+```
+
+Live app (Playwright):
+
+```text
+Evidence Inbox → Reject →
+  toast:  Rejected "…". The record stays, so the claim can still be traced back to it.
+  item leaves triage; console errors after clean reload: 0
+Vault: 4 evidence_item nodes → 2 accepted, 1 rejected, 1 unspecified
+       status: rejected present in the .md file            ← INV-DUR, not SQLite-only
+"All" list row titles: 0 of 4 are ULIDs (all four read as prose)
+#facet/status/rejected → h1 "rejected · status", lists the rejected evidence item
+```
+
+### Known limitations
+
+- One evidence node has **no `status` frontmatter at all** and renders as
+  `unspecified` with an excerpt of `—`. It was seeded that way; not touched,
+  because adding a status is a state transition no endpoint defines.
+- The remaining `status: drafted` node in the vault is not an `evidence_item`,
+  so it never appears in the Evidence Inbox triage list. Out of scope here.
+
+Status: Accepted
+
+## EV-028 — Bet kill endpoint + the stale derived index (S-BET-KILL)
+
+Date: 2026-10-06
+Slice: S-BET-KILL — `POST /api/bets/{id}/kill`; write-path index rebuild
+Agent: main (opencode/mimo-v2.6-flash-free)
+Spec IDs: SDS-STRAT, SDS-INDEX, SDS-GATE; INV-BET, INV-HUMAN, INV-DUR, INV-EDGE, INV-DAY.
+
+### 1. The decision (OQ-BET-KILL, operator 2026-10-06)
+
+SPEC §10.2 defines `POST /bets/{id}/approve` and **no** kill endpoint, while
+`BetStatus::Killed` exists and INV-BET's failure mode is *"strategy theater;
+bets that cannot fail or be killed."* Three options were written up in
+`.agents/open_questions.md` → `OQ-BET-KILL`; the operator chose **(a): a
+non-gated transition, symmetric to `reject_evidence`** — declining needs no
+proof, and inventing a `can_kill_bet` would be policy the spec does not state.
+
+**Shipped as decided, and flagged as an API-surface extension beyond §10.2** —
+not as if the spec already said so.
+
+### 2. What shipped
+
+- `core/src/services.rs::kill_bet` — sets `BetStatus::Killed`, persists, emits;
+  returns early when already killed so a double confirm cannot double-log.
+- `ActivityKind::Killed` + its exhaustive `"killed"` arm in `daynote_sink`.
+- `server/src/http.rs` — `POST /api/bets/:id/kill`.
+- `ui/src/api.ts::killBet`; `BetBoard.kill` now calls it instead of
+  `patchNode` (which strips `status` and had made the button a lie).
+
+### 3. The defect this uncovered: the derived index never saw writes
+
+The new bet did **not** appear on the Bet Board. Not a UI bug —
+`GET /api/nodes` (markdown, via `vault.all()`) listed it, but
+`GET /api/nodes/:ty` (which `useTypedNodes` → every strategy screen reads)
+served `st.index.nodes_by_type()` and did not.
+
+Audit of `server/src/http.rs`: of 23 write handlers, only 6 rebuilt the index
+(`create_note`, `create_node`, `seed`, `delete_note`, `clone_note`,
+`create_agent_run`). **`draft_bet`, `promote_note`, `link_node`, `approve_bet`,
+`schedule_timebox`, `create_work_package` and 17 others did not** — so anything
+created, promoted or linked was invisible to typed lists, backlinks and search
+until the next server restart. `services.rs:213` already documents the contract
+as *"the HTTP layer rebuilds the index first"*; the HTTP layer just was not
+doing it.
+
+Fixed in **one place** rather than trusting 23 handlers: an axum middleware
+layer on non-safe methods that rebuilds after the write.
+
+```rust
+.layer(axum::middleware::from_fn_with_state(state.clone(), |State(st), req, next| async move {
+    let is_write = !req.method().is_safe();
+    let response = next.run(req).await;
+    if is_write { if let Err(e) = st.index.rebuild(&st.vault) { eprintln!(...) } }
+    response
+}))
+```
+
+A failing rebuild does not fail the response — the write already succeeded and
+markdown is the source of truth (INV-DUR) — but it is printed to
+`.run/backend.log` rather than swallowed.
+
+Marked with a `ponytail:` comment: full rebuild per write is O(vault); ceiling
+is when a rebuild stops being sub-millisecond; upgrade path is incremental
+updates on put/delete, or rebuilding only for writes that add, remove or
+retype a node.
+
+### 4. Verification
+
+```text
+cargo test --workspace (all suites except calendar/providers.rs): 125 passed, 0 failed   (+1)
+cargo clippy --workspace --all-targets -- -D warnings:            0 issues
+pnpm -C ui typecheck:                                              clean
+pnpm -C ui test:                                                   12 files, 70 passed
+pnpm -C ui build:                                                  clean
+```
+
+Index middleware, proven without a restart:
+
+```text
+before POST /api/bets  -> /api/nodes/strategy_bet = 3
+after  POST /api/bets  -> /api/nodes/strategy_bet = 4, new id present
+```
+
+UI end-to-end on a throwaway bet:
+
+```text
+created via API → appears on Bet Board DRAFT column
+Kill (arm) → "Kill it" (confirm) →
+  toast: Killed "THROWAWAY probe bet - delete me". The bet stays in the vault,
+         so its history can still be traced.
+  vault: status: killed          ← INV-DUR, markdown not SQLite
+  ledger: - 03:34:17 killed 01M47KPTW4Y2P8TY2M0N38F7Q3 (user)   ← INV-DAY
+  toast reads a thesis, not a ULID  (the nodeTitle fix from EV-027)
+approved demo bet untouched (status: approved)
+both probes deleted afterwards → vault back to 42 nodes, 2 bets
+```
+
+Kill is reachable from **both** board states: draft/blocked (`Approve` row) and
+approved (`Decision record written` row) — each with its own `ConfirmButton`.
+
+### Known limitations
+
+- The demo bet `01KW054BPPDK7KKBW4EXZZZVNE` is now `killed` (it was the draft,
+  used for the first UI attempt). Revert by hand if the seed state is wanted.
+- `PATCH` and every other non-safe method now pays a full index rebuild. Safe
+  at the current vault size; see the `ponytail:` note for the upgrade path.
+- The earlier "UI click did nothing" on the first attempt was **not** a bug —
+  `Kill` is a two-step `ConfirmButton` (arm, then confirm within 4 s), and the
+  probe only armed it. Recorded here because it cost a debugging round.
+
+Status: Accepted
+
+---
+
+## EV-029 — S-CAL-001: calendar view + ICS export (the whole commitment set)
+
+**Slice:** S-CAL-001 · **Spec IDs:** PRD-020, PRD-025, SDS-CAL, SDS-UI, INV-CAL,
+INV-TIME, INV-PORT, TST-CAL, SPEC §10.3 (`POST /calendar/ics/export`), §12.1,
+OQ-002 Option B (resolved: internal timeboxes + ICS export, no live sync).
+**Invariants exercised:** INV-CAL (no provider is dialed anywhere on this path),
+INV-TIME (a calendar row is what makes a wish a commitment), INV-DUR (export
+reads markdown, never the derived index), INV-PORT (the .ics is the portable copy).
+
+An export that could carry only **one** timebox is not a calendar: a subscriber
+would get a fresh calendar per timebox instead of an update. So the plural
+function is the real implementation and the singular one delegates to it — one
+code path, no format drift.
+
+```text
+core/src/ics.rs
+  export_timeboxes_to_ics(&[Timebox]) -> one VCALENDAR, N VEVENTs   (new)
+  export_timebox_to_ics(&Timebox)     -> delegates (from_ref)        (now)
+  export_vault_to_ics(&dyn NodeVault) -> markdown only, sorted by start (new)
+server/src/http.rs
+  POST /api/calendar/ics/export  -> {"ics": "..."}   (SPEC sec 10.3)
+ui/src/api.ts        exportIcs()
+ui/src/views/CalendarView.tsx   day groups + Export .ics   (new)
+ui/src/components/layout/Sidebar.tsx  nav: Execution -> Calendar
+ui/src/App.tsx       VALID + route
+```
+
+Tests (`adapters/tests/calendar.rs`, now 8):
+
+- `tst_cal_006_multi_timebox_export_is_one_calendar` — 1 wrapper / 2 VEVENTs,
+  both UIDs present, RFC 5545 CRLF endings, empty set yields an event-free
+  shell (never phantom events), and the singular entry point matches the plural.
+- `tst_cal_007_vault_export_covers_every_timebox_in_schedule_order` — writes two
+  timeboxes **out of schedule order** plus a non-timebox node: both timeboxes
+  come back, the case node does not, and Jul 1 lands before Jul 2. Re-export is
+  byte-identical.
+
+### Live verification
+
+```text
+POST /api/calendar/ics/export          200
+  1 x BEGIN:VCALENDAR, 4 x BEGIN:VEVENT   == 4 timeboxes in the vault
+  startsWith BEGIN:VCALENDAR\r\n, endsWith END:VCALENDAR\r\n
+
+Browser #calendar:  h1="Calendar", nav item present, rail marks it current
+  day groups: Thu Jun 25, 2026 | Fri Jun 26, 2026 | Mon Oct 5, 2026   (ascending)
+  4 rows, 4 #node/ links, 4 #facet/status/ chips, 0 console errors
+  Export .ics click -> file "strategynotes.ics" actually downloaded
+  downloaded file: 807 bytes, 32 CRLF lines, 4 VEVENTs, valid structure
+```
+
+Responsive sweep: **33/33** (routes x 1440/860/390) — every route has an `h1`,
+`scrollWidth <= clientWidth` everywhere, content present. Derived routes
+re-checked in the same pass: `#facet/status/killed`, `#facet/status/draft`,
+`#facet/type/strategy_bet`, `#node/01KW054BPPDK7KKBW4EXZZZVNE` all render.
+
+### Deliberate limits (not gaps)
+
+- **No Calendar screen is specified in SPEC.** The view is a composition of
+  specified parts (PRD-027: screens are compositions), not a new product
+  surface. It carries no create/edit affordance, so it cannot become a second
+  writer of timebox state.
+- **No live Google/Outlook/iCloud sync** — §12.2 puts it out of MVP scope and
+  OQ-002 resolved to Option B. `calendar/tests/providers.rs` still hangs on
+  network mocks (pre-existing, excluded).
+- `POST` for a read-only export looks wrong but **is what §10.3 specifies**;
+  the spec is the source of truth, so it is a POST and it pays the index
+  middleware's rebuild like every other non-safe method.
+
+Status: Accepted
+
+---
+
+## EV-030 — S-CREATE-001: bets and work packages can be created from the UI
+
+**Slice:** S-CREATE-001 · **Spec IDs:** SDS-UI, PRD-027, PRD-018, §10.2 API
+surface (`POST /bets`, `POST /work-packages`), INV-WORK, INV-DUR, INV-HUMAN.
+**Invariants exercised:** INV-WORK (a work package is bound to a case *and* a
+bet at creation — never to nothing), INV-DUR (the UI never optimistically fakes
+a node; it re-reads markdown), INV-HUMAN (the human drafts, the gate decides
+approval later).
+
+`api.draftBet` and `api.createWorkPackage` existed in `api.ts` and **were never
+called by anything**. The board's own empty state pointed at a promote flow that
+had no affordance either, so the documented path dead-ended. Creation now lives
+**above** `AsyncState` in both views: a board with no items must still be able
+to receive its first item, and an empty state that hides its own create control
+is a trap.
+
+```text
+ui/src/views/BetBoard.tsx     create bar: thesis -> api.draftBet(caseId, text)
+ui/src/views/WorkPlanner.tsx  create bar: objective + bet Select -> api.createWorkPackage
+ui/src/App.tsx                ws.caseId passed to both (same pattern as DocBrowser)
+```
+
+Both bars state their prerequisite instead of failing at submit time:
+
+- no case selected → *"A bet belongs to a case. Pick one in the app bar…"*
+- no bet yet → *"Work hangs off a bet (INV-WORK). Draft a bet first…"* with a
+  link to `#bets`.
+
+### Tests (new, 6 — `BetBoard.test.tsx`, `WorkPlanner.test.tsx`)
+
+- drafts against the active case, trims the thesis, clears the field **only
+  after** the server accepted it;
+- refuses to draft without a case and never calls the API;
+- **keeps the typed thesis when the server refuses** (a failed write must not
+  eat the user's words);
+- creates a package bound to `caseId` + the selected bet, then clears;
+- form hidden without a case; INV-WORK hint + working `#bets` link when there
+  are no bets, API untouched.
+
+### Live verification
+
+```text
+#bets   before: 2 cards, input present, Draft bet disabled while empty
+        submit  -> after: 3 cards, thesis visible, field cleared, NO page reload
+#work   bet Select listed 3 bets INCLUDING the one created seconds earlier
+        -> proof the EV-028 index middleware makes new nodes visible at once
+        submit  -> new package row appears, field cleared
+```
+
+**Probe cleanup:** both nodes created during verification were deleted via
+`DELETE /api/notes/{id}` (work package first, so no dangling `linked_bet` —
+INV-EDGE). Vault back to 2 bets / 3 work packages; `approved` and `killed` demo
+bets untouched.
+
+```text
+cargo test (24 suites, all but calendar/providers.rs)   133 passed, 0 failed
+cargo clippy --workspace --all-targets -- -D warnings   0 issues
+pnpm -C ui typecheck                                    clean
+pnpm -C ui test                                         15 files, 79 passed
+pnpm -C ui build                                        clean
+Playwright: 33/33 responsive combos, 5/5 derived routes, 0 console errors
+```
+
+### Known limitations
+
+- **No delete affordance on BetBoard / WorkPlanner.** Deleting from Notes works
+  and is guarded (EV-025), but these boards still have none — which is exactly
+  why probe cleanup had to go through the API by hand.
+- A bet's thesis is its excerpt; the board's row title is an excerpt-link, not a
+  title-link (carried from UI-UX-REFINE-001).
+- `createClaim` / `claimValue` / `acceptAgentRun` are still declared and never
+  called — deliberately out of slice.
+- Creating a bet requires a **selected** case. "All cases" (null) disables the
+  bar with a reason rather than silently filing the bet under an arbitrary case.
+
+Status: Accepted

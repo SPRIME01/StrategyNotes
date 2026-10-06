@@ -50,6 +50,12 @@ export function nodeTitle(node: GraphNode): string {
   if (t) return t;
   const bodyLine = (node.body ?? "").split("\n").find((l) => l.trim());
   if (bodyLine) return bodyLine.replace(/^#+\s*/, "").trim();
+  // Many typed nodes carry no `title` and no body — evidence stores its claim in
+  // `text`, bets in `thesis`. Reading the id here put a ULID into toasts,
+  // headings and list rows, which DESIGN.md §10 keeps off reading surfaces.
+  const ex = nodeExcerpt(node, 60);
+  if (ex && ex !== "—") return ex;
+  // Nothing human to show at all — the id is the only stable identifier left.
   return node.id.slice(0, 18);
 }
 
@@ -67,8 +73,31 @@ export function nodeExcerpt(node: GraphNode, n = 120): string {
 }
 
 /** Excerpt for a backlink/preview, trimmed to one line. */
-export function nodeSnippet(node: GraphNode, n = 60): string {
+export function nodeSnippet(node: GraphNode, n = 60) {
   return nodeExcerpt(node, n).split("\n")[0];
+}
+
+/**
+ * Preview text for a list row. Strips the infrastructure syntax a human never
+ * wrote as prose: `((ULID))` transclusion refs, `[[wikilink]]` targets, and
+ * leading ATX hashes. A list must not show the user their own storage format.
+ */
+export function nodePreview(node: GraphNode, n = 110) {
+  const raw =
+    fmString(node, "text") ||
+    fmString(node, "statement") ||
+    fmString(node, "thesis") ||
+    fmString(node, "objective") ||
+    fmString(node, "summary") ||
+    (node.body ?? "");
+  const cleaned = raw
+    .replace(/\(\([0-9A-Za-z]{10,}\)\)/g, " ")
+    .replace(/\[\[([^\]|]+)(\|[^\]]+)?\]\]/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\n+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return cleaned.length > n ? `${cleaned.slice(0, n)}…` : cleaned;
 }
 
 /** True if a frontmatter field is "filled" (non-empty scalar or non-empty array). */
@@ -97,4 +126,42 @@ export function nodeEdges(node: GraphNode): NodeEdge[] {
       status: typeof e.status === "string" ? e.status : undefined,
     }))
     .filter((e) => e.to && e.edge_type);
+}
+
+// ─── Graph references (INV-EDGE) ───────────────────────────────────────────
+// Strategy-critical relationships live in frontmatter, never in SQLite alone.
+// These read them back out of the vault so a derived page can be built from
+// markdown and nothing else — no write, no index dependency.
+
+/** Crockford-ULID shaped values. Deliberately permissive: this is a detector,
+ *  not a validator — the server owns id validation. */
+const ULID_RE = /\b01[A-Z0-9]{24}\b/g;
+
+/** Every node id this node's frontmatter points at (scalars, lists, nested).
+ *  The node's own id is excluded. */
+export function nodeRefs(node: GraphNode): string[] {
+  const out = new Set<string>();
+  const walk = (v: unknown): void => {
+    if (typeof v === "string") {
+      for (const m of v.matchAll(ULID_RE)) out.add(m[0]);
+    } else if (Array.isArray(v)) {
+      v.forEach(walk);
+    } else if (v && typeof v === "object") {
+      Object.values(v).forEach(walk);
+    }
+  };
+  Object.values(node.frontmatter ?? {}).forEach(walk);
+  out.delete(node.id);
+  return [...out];
+}
+
+/** Every node whose frontmatter names `id` — the backlinks of a node. */
+export function nodesReferencing(nodes: GraphNode[], id: string): GraphNode[] {
+  return nodes.filter((n) => n.id !== id && nodeRefs(n).includes(id));
+}
+
+/** Inline `#tags` of a node. INV-BODY: the body is authoritative for tags —
+ *  there is no `tags` frontmatter key and we are not inventing one. */
+export function tagsOf(node: GraphNode): string[] {
+  return [...new Set([...(node.body ?? "").matchAll(/#([\w-]+)/g)].map((m) => m[1]))];
 }

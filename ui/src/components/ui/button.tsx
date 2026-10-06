@@ -3,26 +3,35 @@ import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "../../lib/utils";
 
+// Button voice — DESIGN.md §6, §13.
+// default  → the one solid accent action per view
+// outline → the other real actions, hairline
+// ghost   → tertiary
+// danger  → destructive, deliberately QUIET (never the solid prominent thing)
+// States: default · hover · focus-visible (global ring) · active · disabled.
+// Loading and error are expressed by the caller replacing the label, not by this layer.
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium t-fast disabled:pointer-events-none disabled:opacity-45",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
-        destructive: "bg-destructive text-white hover:bg-destructive/90",
-        outline: "border bg-transparent hover:bg-secondary",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost: "hover:bg-secondary",
+        default: "bg-primary text-primary-foreground hover:bg-primary/85 active:bg-primary/75",
+        outline: "border border-border-strong bg-transparent text-foreground hover:bg-surface-3",
+        secondary: "bg-surface-3 text-secondary-foreground hover:bg-surface-4",
+        ghost: "text-muted-foreground hover:bg-surface-3 hover:text-foreground",
         link: "text-primary underline-offset-4 hover:underline",
+        // Destructive is text-weight-only. If it shouts, it gets clicked by accident.
+        danger: "text-destructive hover:bg-destructive-bg",
       },
       size: {
-        default: "h-9 px-4 py-2",
-        sm: "h-8 rounded-md px-3 text-xs",
-        lg: "h-10 rounded-md px-8",
-        icon: "h-9 w-9",
+        sm: "h-7 px-2.5 text-xs",
+        md: "h-8 px-3 text-sm",
+        lg: "h-9 px-4 text-sm",
+        icon: "size-8",
+        "icon-sm": "size-7",
       },
     },
-    defaultVariants: { variant: "default", size: "default" },
+    defaultVariants: { variant: "outline", size: "md" },
   },
 );
 
@@ -33,10 +42,15 @@ export interface ButtonProps
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
+  ({ className, variant, size, asChild = false, type = "button", ...props }, ref) => {
     const Comp = asChild ? Slot : "button";
     return (
-      <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        type={asChild ? undefined : type}
+        {...props}
+      />
     );
   },
 );

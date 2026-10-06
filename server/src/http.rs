@@ -19,6 +19,7 @@ use tower_http::cors::CorsLayer;
 use strategynotes_adapters::{DaynoteEventSink, MarkdownVault, SQLiteIndex, SystemClock, UlidMinter};
 use strategynotes_core::evidence::{EvidenceKind, ProofLevel};
 use strategynotes_core::execution::{Completion, PomoEstimate};
+use strategynotes_core::ics;
 use strategynotes_core::node::NodeType;
 use strategynotes_core::node::EdgeType;
 use strategynotes_core::ports::{DerivedIndex, NodeVault};
@@ -66,6 +67,7 @@ pub async fn serve(data_dir: &Path, port: u16) -> Result<(), Box<dyn std::error:
         .route("/api/node/:id", get(get_node).patch(patch_node))
         .route("/api/node", post(create_node))
         .route("/api/seed", post(seed))
+        .route("/api/nodes", get(list_all_nodes))
         .route("/api/nodes/:ty", get(list_nodes_by_type))
         .route("/api/notes", post(create_note))
         .route("/api/notes/:id", axum::routing::put(update_note).delete(delete_note))
@@ -79,13 +81,16 @@ pub async fn serve(data_dir: &Path, port: u16) -> Result<(), Box<dyn std::error:
         .route("/api/source-chunks", post(add_source_chunk))
         .route("/api/evidence", post(extract_evidence))
         .route("/api/evidence/:id/accept", post(accept_evidence))
+        .route("/api/evidence/:id/reject", post(reject_evidence))
         .route("/api/claims", post(create_claim))
         .route("/api/bets", post(draft_bet))
         .route("/api/bets/:id/approve", post(approve_bet))
+        .route("/api/bets/:id/kill", post(kill_bet))
         .route("/api/work-packages", post(create_work_package))
         .route("/api/work-packages/:id/commit", post(commit_work_package))
         .route("/api/timeboxes", post(schedule_timebox))
         .route("/api/timeboxes/:id/review", post(review_timebox))
+        .route("/api/calendar/ics/export", post(export_ics))
         .route("/api/value-claims", post(claim_value))
         .route("/api/value-claims/:id/validate", post(validate_value))
         .route("/api/agent-runs", get(list_agent_runs).post(create_agent_run))
@@ -97,6 +102,35 @@ pub async fn serve(data_dir: &Path, port: u16) -> Result<(), Box<dyn std::error:
         .route("/api/search", get(search))
         .route("/api/daynote/:date", get(daynote))
         .layer(CorsLayer::permissive())
+        // INV-DUR: SQLite is only a derived index over the markdown vault, and
+        // services.rs documents the contract as "the HTTP layer rebuilds the
+        // index first". Twenty-three write handlers did not — so a bet you had
+        // just created was invisible on the Bet Board, a promoted note stayed
+        // unlisted, and a new edge never reached backlinks, until the next
+        // server restart. One middleware keeps the rule uniform instead of
+        // trusting every handler to remember it.
+        //
+        // ponytail: this is a full rebuild per write — O(vault). Ceiling: vaults
+        // where a rebuild stops being sub-millisecond. Upgrade path: incremental
+        // index updates on put/delete, or rebuild only for writes that add,
+        // remove or retype a node.
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            |State(st): State<Arc<ServerState>>, req: axum::extract::Request, next: axum::middleware::Next| async move {
+                let is_write = !req.method().is_safe();
+                let where_ = (req.method().to_string(), req.uri().path().to_string());
+                let response = next.run(req).await;
+                if is_write {
+                    if let Err(e) = st.index.rebuild(&st.vault) {
+                        // The write itself already succeeded and markdown is the
+                        // source of truth, so do not fail the response — but do
+                        // not lose the fact that reads are now stale either.
+                        eprintln!("[index] rebuild after {} {} failed: {e}", where_.0, where_.1);
+                    }
+                }
+                response
+            },
+        ))
         .with_state(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
@@ -121,6 +155,22 @@ async fn get_node(
         .get(&nid)?
         .ok_or(AppError(StatusCode::NOT_FOUND, format!("node {id} not found")))?;
     Ok(Json(serde_json::to_value(&node)?))
+}
+
+/// GET /api/nodes - every node in the vault, in one round trip.
+///
+/// Derived pages (a status list, a tag list, a type list) need to answer
+/// "which nodes match?" across *all* node types. The per-type route would cost
+/// one request per type plus one per node. The vault is local markdown and small,
+/// so one read-only snapshot is the simplest correct answer.
+///
+/// Read-only by construction: a derived view never writes (INV-DUR — markdown
+/// remains the only source of truth; this is a projection of it).
+async fn list_all_nodes(State(st): State<Arc<ServerState>>) -> Result<Json<Vec<serde_json::Value>>, AppError> {
+    let nodes = st.vault.all()?;
+    Ok(Json(
+        nodes.into_iter().map(serde_json::to_value).collect::<Result<_, _>>()?,
+    ))
 }
 
 /// GET /api/nodes/:ty - list node ids of a given type (snake_case).
@@ -387,6 +437,17 @@ async fn accept_evidence(
     Ok(Json(st.app().accept_evidence(id)?))
 }
 
+/// SPEC sec 10.2. Rejection is a human decline, not a gate pass - INV-HUMAN.
+/// The item stays in the vault so counterevidence is never silently discarded
+/// (INV-CONTRA); only its status and the activity ledger change.
+async fn reject_evidence(
+    State(st): State<Arc<ServerState>>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let id = NodeId::parse(&id)?;
+    Ok(Json(serde_json::to_value(&st.app().reject_evidence(id)?)?))
+}
+
 #[derive(Deserialize)]
 struct CreateClaimBody {
     statement: String,
@@ -423,6 +484,16 @@ async fn approve_bet(
     AxumPath(id): AxumPath<String>,
 ) -> Result<Json<GateResult>, AppError> {
     Ok(Json(st.app().approve_bet(NodeId::parse(&id)?)?))
+}
+
+/// OQ-BET-KILL (operator decision 2026-10-06). Non-gated, unlike approve:
+/// SPEC sec 10.2 defines no kill gate, and INV-BET only demands that a bet be
+/// killable. The bet stays in the vault so its history remains traceable.
+async fn kill_bet(
+    State(st): State<Arc<ServerState>>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    Ok(Json(serde_json::to_value(&st.app().kill_bet(NodeId::parse(&id)?)?)?))
 }
 
 #[derive(Deserialize)]
@@ -493,6 +564,16 @@ async fn review_timebox(
         b.next_action,
     )?;
     Ok(Json(serde_json::json!({"gate": result})))
+}
+
+/// POST /api/calendar/ics/export (SPEC sec 10.3). OQ-002 Option B: the internal
+/// timebox set plus an ICS file *is* the calendar integration — no provider is
+/// dialed, so nothing here can fail into INV-CAL. Reads markdown directly, never
+/// the derived index, so the export is correct before any rebuild (INV-DUR).
+async fn export_ics(
+    State(st): State<Arc<ServerState>>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    Ok(Json(serde_json::json!({ "ics": ics::export_vault_to_ics(&st.vault)? })))
 }
 
 #[derive(Deserialize)]

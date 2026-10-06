@@ -8,6 +8,8 @@ import { api } from "../../api";
 import { useAllStrategyNodes } from "../../hooks/useTypedNodes";
 import { fmString, nodeTitle } from "../../lib/node";
 import { Copy, Check } from "lucide-react";
+import { Button } from "../ui/button";
+import { Select } from "../ui/field";
 
 export function CloneSection({
   id,
@@ -38,7 +40,11 @@ export function CloneSection({
       onCloned?.();
     } catch (e) {
       // Most likely INV-CLONE: a cycle (cloning into a descendant).
-      setErr(e instanceof Error ? e.message : "clone rejected (cycle?)");
+      setErr(
+        e instanceof Error
+          ? e.message
+          : "Refused: a node cannot be placed inside its own descendant.",
+      );
     }
     setBusy(false);
   };
@@ -55,26 +61,29 @@ export function CloneSection({
       ) : (
         placements.map((pid) => <PlacementRow key={pid} id={pid} />)
       )}
-      <div className="mt-1 flex flex-wrap gap-1">
-        <select
+      <div className="mt-1 flex items-center gap-1">
+        <Select
+          aria-label="Place this node into another note"
           value={target}
           onChange={(e) => setTarget(e.target.value)}
-          className="flex-1 rounded border bg-surface-2 px-2 py-1 text-xs"
+          className="h-7 min-w-0 flex-1 text-xs"
         >
           <option value="">clone into…</option>
           {nodes.filter((n) => n.id !== id).slice(0, 100).map((n) => (
-            <option key={n.id} value={n.id}>[{n.type}] {fmString(n, "title") || nodeTitle(n)}</option>
+            <option key={n.id} value={n.id}>
+              [{n.type.replace(/_/g, " ")}] {fmString(n, "title") || nodeTitle(n)}
+            </option>
           ))}
-        </select>
-        <button
+        </Select>
+        <Button
+          size="sm"
           onClick={clone}
           disabled={!target || busy}
-          className="flex items-center gap-1 rounded border border-primary/40 bg-primary/10 px-2 py-1 text-xs disabled:opacity-40"
-          title="Equal-placement clone (INV-CLONE: cycles rejected)"
+          title="Add this node as an equal placement inside another note. Cycles are rejected."
         >
-          {busy ? <Check className="size-3" /> : <Copy className="size-3" />}
-          clone
-        </button>
+          {busy ? <Check className="size-3" aria-hidden="true" /> : <Copy className="size-3" aria-hidden="true" />}
+          Clone
+        </Button>
       </div>
       {err && <p className="text-[10px] text-gate-bad">{err}</p>}
     </div>
@@ -84,9 +93,10 @@ export function CloneSection({
 function PlacementRow({ id }: { id: string }) {
   const { nodes } = useAllStrategyNodes();
   const found = nodes.find((n) => n.id === id);
+  const title = found ? fmString(found, "title") || nodeTitle(found) : null;
   return (
-    <div className="font-mono text-[10px] text-primary">
-      {found ? fmString(found, "title") || nodeTitle(found) : id.slice(0, 18)}
+    <div className="t-datum truncate text-primary" title={title ?? `Untitled placement · ${id}`}>
+      {title ?? (found ? `Untitled ${found.type.replace(/_/g, " ")}` : `unresolved · ${id.slice(0, 8)}`)}
     </div>
   );
 }

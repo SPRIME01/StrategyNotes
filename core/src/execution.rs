@@ -44,6 +44,16 @@ pub struct WorkPackage {
     pub evidence_required: Vec<String>,
     #[serde(default)]
     pub status: WorkStatus,
+    /// PRD-019: every work package carries an estimated pomo cost.
+    ///
+    /// `#[serde(default)]` so markdown written before this field existed still
+    /// parses (INV-DUR). It MUST be a struct field rather than an open-map key:
+    /// `services::put` rebuilds frontmatter from the typed view, so any key not
+    /// declared here is silently dropped by the next typed write — which in
+    /// practice means `commit_work_package` would destroy the estimate the UI
+    /// had just saved. 0 reads as "no estimate yet", never as a real cost.
+    #[serde(default)]
+    pub pomos: u32,
 }
 
 /// Budgeted attention quality, not just clock time (SPEC sec 2.4).

@@ -4,7 +4,7 @@
 use chrono::{TimeZone, Utc};
 use strategynotes_adapters::{
     google_calendar_provider, icloud_calendar_provider, outlook_calendar_provider,
-    InternalCalendarProvider, IcsCalendarProvider,
+    InternalCalendarProvider, IcsCalendarProvider, MarkdownVault,
 };
 use strategynotes_core::calendar::{CalendarProvider, ProviderStatus};
 use strategynotes_core::execution::{PomoEstimate, Timebox, TimeboxStatus};
@@ -87,4 +87,88 @@ fn internal_provider_is_always_available() {
     assert!(matches!(i.status(), ProviderStatus::Available));
     let ev = i.create_event(&timebox()).unwrap();
     assert!(ev.external_id.starts_with("internal:"));
+}
+
+/// OQ-002 Option B (resolved): internal timeboxes + ICS export. SPEC sec 10.3
+/// `POST /calendar/ics/export`. An export that can carry only one timebox is
+/// not a calendar — the whole commitment set has to travel as ONE VCALENDAR,
+/// or a subscriber gets a fresh calendar per timebox instead of an update.
+#[test]
+fn tst_cal_006_multi_timebox_export_is_one_calendar() {
+    use strategynotes_core::ics::export_timeboxes_to_ics;
+
+    let mut second = timebox();
+    second.id = NodeId::parse("01HZX8KQBJ9GYWN3QFVYRXTXYZ").unwrap();
+    second.scheduled_start = Utc.with_ymd_and_hms(2026, 7, 2, 9, 0, 0).unwrap();
+    second.scheduled_end = Utc.with_ymd_and_hms(2026, 7, 2, 10, 0, 0).unwrap();
+    second.expected_output = Some("review evidence".into());
+
+    let ics = export_timeboxes_to_ics(&[timebox(), second]);
+
+    assert_eq!(ics.matches("BEGIN:VCALENDAR").count(), 1, "one wrapper:\n{ics}");
+    assert_eq!(ics.matches("END:VCALENDAR").count(), 1);
+    assert_eq!(ics.matches("BEGIN:VEVENT").count(), 2, "one event per timebox");
+    assert_eq!(ics.matches("END:VEVENT").count(), 2);
+    assert!(ics.contains("UID:01HZX8KQBJ9GYWN3QFVYRXTXMS@strategynotes"));
+    assert!(ics.contains("UID:01HZX8KQBJ9GYWN3QFVYRXTXYZ@strategynotes"));
+    assert!(ics.contains("DTSTART:20260701T130000Z"));
+    assert!(ics.contains("DTSTART:20260702T090000Z"));
+    assert!(ics.ends_with("END:VCALENDAR\r\n"), "RFC 5545 CRLF endings");
+
+    // An empty export is still a valid calendar shell — never phantom events.
+    let empty = export_timeboxes_to_ics(&[]);
+    assert!(empty.contains("BEGIN:VCALENDAR"));
+    assert!(!empty.contains("BEGIN:VEVENT"), "no phantom events:\n{empty}");
+
+    // The single-timebox entry point is the plural one, not a second code path.
+    let single = strategynotes_core::ics::export_timebox_to_ics(&timebox());
+    assert_eq!(single.matches("BEGIN:VEVENT").count(), 1);
+}
+
+/// The export endpoint (SPEC sec 10.3 `POST /calendar/ics/export`) reads the
+/// vault — it never learns how a timebox got there. So the behavior that needs
+/// proving is: every timebox in the vault is in the file, nothing else is, and
+/// the calendar comes out in schedule order (deterministic, no matter the order
+/// nodes were written).
+#[test]
+fn tst_cal_007_vault_export_covers_every_timebox_in_schedule_order() {
+    use strategynotes_adapters::{DaynoteEventSink, SystemClock, UlidMinter};
+    use strategynotes_core::ics::export_vault_to_ics;
+    use strategynotes_core::ports::NodeVault;
+    use strategynotes_core::services::App;
+    use strategynotes_core::views::TypedView;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let vault = MarkdownVault::open(tmp.path().join("vault")).unwrap();
+    let sink = DaynoteEventSink::open(tmp.path().join("daynotes")).unwrap();
+    let app = App { vault: &vault, sink: &sink, minter: &UlidMinter, clock: &SystemClock };
+
+    // A non-timebox node, so we prove the type filter rather than assume it.
+    let _case = app.create_case("Founder-market on speed".into()).unwrap();
+
+    let later = Timebox {
+        id: NodeId::parse("01HZX8KQBJ9GYWN3QFVYRXTXYZ").unwrap(),
+        scheduled_start: Utc.with_ymd_and_hms(2026, 7, 2, 9, 0, 0).unwrap(),
+        scheduled_end: Utc.with_ymd_and_hms(2026, 7, 2, 10, 0, 0).unwrap(),
+        ..timebox()
+    };
+    let earlier = Timebox {
+        id: NodeId::parse("01HZX8KQBJ9GYWN3QFVYRXTXMS").unwrap(),
+        ..timebox()
+    };
+    // Written deliberately out of schedule order.
+    vault.put(&later.to_node().unwrap()).unwrap();
+    vault.put(&earlier.to_node().unwrap()).unwrap();
+
+    let ics = export_vault_to_ics(&vault).unwrap();
+
+    assert_eq!(ics.matches("BEGIN:VEVENT").count(), 2, "both timeboxes, no case node:\n{ics}");
+    let jul1 = ics.find("DTSTART:20260701T130000Z").expect("earlier timebox present");
+    let jul2 = ics.find("DTSTART:20260702T090000Z").expect("later timebox present");
+    assert!(ics.contains("BEGIN:VCALENDAR"));
+    // Schedule order, regardless of write order.
+    assert!(jul1 < jul2, "events must come out in schedule order");
+
+    // Re-export is stable: same set, same order.
+    assert_eq!(ics, export_vault_to_ics(&vault).unwrap());
 }

@@ -1,8 +1,10 @@
-// Document browser — the single generated-docs surface. Tabs across
-// ERD/ORD/SLD/EDS/VSD; each renders its GeneratedDoc spec. Every doc is a
-// living view over the graph (regenerated on open), not a static file.
+// Generated docs — layout family D (Reading): tab strip → measure-capped article.
+//
+// The six strategy documents are generated views over the graph, not files. The
+// article is capped to a reading measure and entries are rows, not cards.
 
 import { useState } from "react";
+import { PageHead } from "../components/layout/PageHead";
 import { GeneratedDoc } from "./GeneratedDoc";
 import { DOC_SPECS } from "./docSpecs";
 import { cn } from "../lib/utils";
@@ -12,25 +14,48 @@ export function DocBrowser({ caseId }: { caseId?: string | null }) {
   const active = DOC_SPECS.find((d) => d.id === activeId) ?? DOC_SPECS[0];
 
   return (
-    <div>
-      <div className="mb-4 flex flex-wrap gap-1 border-b">
+    <div className="flex flex-col gap-4">
+      <PageHead
+        kicker="generated"
+        title={active.title}
+        sub={active.intro}
+      />
+
+      <div
+        role="tablist"
+        aria-label="Strategy documents"
+        className="flex flex-wrap gap-1 border-b"
+      >
         {DOC_SPECS.map((d) => (
           <button
             key={d.id}
+            role="tab"
+            aria-selected={d.id === activeId}
+            aria-controls={`docpanel-${d.id}`}
+            id={`doctab-${d.id}`}
             onClick={() => setActiveId(d.id)}
+            title={d.title}
             className={cn(
-              "border-b-2 px-3 py-1.5 text-xs font-medium uppercase tracking-wider transition-colors",
+              "t-fast -mb-px border-b-2 px-3 py-1.5 t-label",
               d.id === activeId
                 ? "border-primary text-foreground"
                 : "border-transparent text-muted-ink hover:text-foreground",
             )}
-            title={d.title}
           >
-            {d.id.toUpperCase()}
+            {d.id}
           </button>
         ))}
       </div>
-      <GeneratedDoc spec={active} caseId={caseId} />
+
+      <div
+        role="tabpanel"
+        id={`docpanel-${active.id}`}
+        aria-labelledby={`doctab-${active.id}`}
+        className="min-w-0"
+      >
+        <GeneratedDoc spec={active} caseId={caseId} />
+      </div>
+
     </div>
   );
 }

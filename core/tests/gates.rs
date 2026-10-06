@@ -164,6 +164,7 @@ fn full_work_package() -> WorkPackage {
         exception_policy: Some("capture ideas; solve local blockers only".into()),
         evidence_required: vec!["EV-MAN".into()],
         status: WorkStatus::Intent,
+        pomos: 6,
     }
 }
 

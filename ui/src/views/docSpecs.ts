@@ -10,7 +10,7 @@ export const DOC_SPECS: DocSpec[] = [
     id: "erd",
     title: "Evidence Reality Dossier",
     kicker: "REALITY",
-    intro: "A living view over accepted evidence. Regenerated from the graph — not a static file. Drafted items are excluded until they pass the acceptance gate.",
+    intro: "A living view over accepted evidence. Regenerated from the graph, not a static file. Drafted items are excluded until they pass the acceptance gate.",
     sections: [
       {
         label: "Accepted Evidence",

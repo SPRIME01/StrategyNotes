@@ -80,6 +80,8 @@ pub enum ActivityKind {
     Modified,
     Scheduled,
     Accepted, // evidence/claim/bet acceptance - gate-driven
+    Rejected, // evidence rejection - a human decline, recorded not discarded (INV-CONTRA)
+    Killed,   // bet killed - OQ-BET-KILL; INV-BET demands bets be killable
     Verified, // timebox verification
 }
 

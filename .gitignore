@@ -3,10 +3,21 @@
 # Agent / runtime logs (OMC subtask output, etc.)
 .logs/
 
-# OMC per-session orchestration stubs (managed by the OMC system; high churn).
-# Durable project state in .agents/ IS tracked (evidence.md, open_questions.md).
+# Agent handoff files (rewritten every session — high churn).
+# Durable project state in .agents/ IS tracked (evidence.md, open_questions.md,
+# specs/, plans/). .agents/lessons/ IS tracked — it is durable, not churn.
 .agents/current_status.md
 .agents/next_steps.md
+
+# OMC per-session orchestration stubs (managed by the OMC system; high churn)
+.omc/
+
+# Browser automation artifacts (playwright-cli: console logs, page snapshots,
+# downloaded files). Generated per run; never source.
+.playwright-cli/
+
+# Code graph index (machine-generated)
+.codegraph
 
 # Windows download artifacts
 *:Zone.Identifier

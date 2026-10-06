@@ -67,6 +67,8 @@ fn format_event_line(e: &ActivityEvent) -> String {
         ActivityKind::Modified => "modified",
         ActivityKind::Scheduled => "scheduled",
         ActivityKind::Accepted => "accepted",
+        ActivityKind::Rejected => "rejected",
+        ActivityKind::Killed => "killed",
         ActivityKind::Verified => "verified",
     };
     let source = match e.source {

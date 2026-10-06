@@ -83,3 +83,82 @@ Workaround (current): delete `strategynotes-data/index.db`; it is regenerated
 on next server start. Verified safe — vault markdown is untouched.
 
 Owner: Sam / Storage
+
+---
+
+## OQ-WORK-GATE — `can_commit_work_package` does not check the pomo estimate
+
+Raised: 2026-10-06 · Slice: S-WORK-001 · Owner: Sam · Status: Open
+Affected IDs: PRD-019, PRD-020, SDS-WORK, SDS-TIME, INV-TIME, INV-WORK, TST-WORK
+
+SPEC (`.agents/specs/SPEC.md` §515) states the work commitment gate requires a
+**"estimated pomos"** — i.e. PRD-019's "every work package carries a pomo estimate" is
+supposed to be gate-enforced. `core/src/gates.rs` (`can_commit_work_package`) does not read
+`WorkPackage.pomos` at all. INV-TIME ("no committed work without estimated pomo cost AND a
+calendar timebox") is therefore **not enforced on the estimate half**.
+
+Decided for now (operator, 2026-10-06): **leave the gate as-is.** `WorkPackage.pomos` was
+added (`#[serde(default)]`, PRD-019) so the field exists and round-trips
+(`core/tests/execution.rs`, 5 tests), and the UI can set it — but flipping the gate would
+block every legacy work package that has no estimate yet (all three seeded ones), turning a
+working view into a wall of refusals with no migration path.
+
+Open question: when the gate starts checking `pomos > 0`, what happens to
+pre-existing estimate-less work packages?
+  (a) block them until an estimate is supplied (spec-literal, breaks the seed),
+  (b) grandfather nodes written before the rule existed (needs a recorded-at marker), or
+  (c) treat a linked timebox's `estimate.pomos` as satisfying the gate (the estimate is
+      already stored, just on the timebox rather than the WP).
+
+Recommendation: **(c)** — it reads the estimate from markdown rather than inventing state,
+and it makes the four existing timeboxes meaningful. Decide before any slice claims
+INV-TIME is enforced.
+
+
+---
+
+## OQ-BET-KILL — no spec'd way to kill a bet; the UI button lies
+
+Raised: 2026-10-06 · Slice: S-BET-KILL · Owner: Sam · **Status: RESOLVED (operator, 2026-10-06 — option (a))**
+Affected IDs: SDS-STRAT, SDS-GATE, INV-BET, INV-HUMAN, TST-STRAT
+
+`BetBoard`'s **Kill** button (`views/BetBoard.tsx:95`) does
+`api.patchNode(b.id, { frontmatter: { ...b.frontmatter, status: "killed" } })`.
+`services::update_node` strips `status` before merging (gate-owned), so the call
+succeeds, the toast says *"Killed "<title>". The record stays; its status does
+not."*, and **the bet is unchanged**. Same defect class as evidence rejection,
+fixed in EV-027 for evidence — but the bet case has no spec to implement against:
+
+- SPEC §10.2 lists `POST /bets/{id}/approve` and **no** `/bets/{id}/kill`.
+- The gate catalog (§9.1) has no kill gate.
+- `BetStatus::Killed` **does** exist (`core/src/strategy.rs:148`), and INV-BET's
+  failure mode reads *"strategy theater; bets that cannot fail or be killed."*
+- `can_approve_bet` requires `kill_criteria` to exist — the spec tells you *when*
+  to kill, not *how*.
+
+So: the model says a bet can be killed, the UI offers to kill it, the invariant
+says it must be killable, and the API surface has no endpoint for it.
+
+Options:
+  (a) add `POST /bets/{id}/kill` as a **non-gated** transition, symmetric to
+      `reject_evidence` — declining needs no proof (INV-HUMAN), the ledger entry
+      is the record. Smallest change that makes the button true.
+  (b) add it **behind a gate** (`can_kill_bet`) — but no such gate is specified,
+      so this invents one and forces decisions the spec does not ask for
+      (does killing an approved bet need a reason? does it need `kill_criteria`?).
+  (c) remove/disable the Kill button until the spec defines the transition —
+      honest, but leaves `BetStatus::Killed` unreachable and INV-BET's stated
+      purpose unimplementable.
+
+Recommendation: **(a)**, with the caveat that it extends the API surface beyond
+§10.2 and therefore needs operator ratification. Do not ship it as if the spec
+already said so.
+
+Pending until then: `BetBoard.kill` still silently no-ops. `EvidenceInbox` no
+longer does (EV-027).
+
+**Resolution (operator, 2026-10-06):** option **(a)** — `POST /api/bets/{id}/kill`
+added as a non-gated transition, symmetric to `reject_evidence`. Shipped and verified
+in `.agents/evidence.md` → **EV-028**. It remains an extension of the API surface
+beyond SPEC §10.2, recorded here rather than folded into the spec: if the spec is
+later updated, §10.2 should list this route.

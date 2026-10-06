@@ -209,27 +209,44 @@ export function NoteEditor({
     return { position: "fixed", left: r.left, top, transform: place === "above" ? "translateY(-100%)" : undefined, zIndex: 50 };
   };
 
+  const titleText = fmString(note, "title", "");
+
   return (
     <div className="relative flex h-full flex-col">
-      {/* title */}
-      <div className="border-b bg-surface-1 px-6 py-4">
+      {/* Title. The ULID that used to sit under it is gone: infrastructure
+          identity is not a reading surface (DESIGN.md §10). It is still reachable
+          in the Trace inspector, where identity is the point. */}
+      <div className="border-b bg-surface-1 px-4 py-3 sm:px-6">
         <div className="mb-1.5">
           <TypeSelector id={note.id} currentType={note.type} onPromoted={onPromote} />
         </div>
-        <input
-          value={fmString(note, "title", "")}
-          onChange={(e) => {
-            onTitleChange?.(e.target.value);
-            scheduleSave(draft);
-          }}
-          placeholder="Untitled"
-          className="w-full bg-transparent text-2xl font-normal tracking-tight outline-none"
-          style={{ fontFamily: "var(--font-display)" }}
-        />
-        <div className="mt-1 flex items-center gap-2 text-[11px] text-faint">
-          <span className="font-mono">{note.id.slice(0, 18)}</span>
-          {saveState === "saving" && <span className="text-muted-ink">saving…</span>}
-        </div>
+        {/* The title IS the document heading. The editor screens had no h1 at
+            all before, so a screen-reader user navigating by heading found
+            nothing on either the Notes or Journal surface.
+
+            The heading's text lives in an <input>, and a form control's value
+            is not text content — so the h1 would have NO accessible name even
+            when the note is titled. aria-label gives the heading a name in both
+            cases; the input keeps its own label so the two stay independent
+            while typing. */}
+        <h1 aria-label={titleText || "Untitled note"}>
+          <input
+            value={titleText}
+            onChange={(e) => {
+              onTitleChange?.(e.target.value);
+              scheduleSave(draft);
+            }}
+            placeholder="Untitled"
+            aria-label="Note title"
+            className="t-display w-full break-any bg-transparent text-2xl font-normal tracking-tight outline-none placeholder:text-faint"
+            style={{ fontFamily: "var(--font-display)" }}
+          />
+        </h1>
+        {saveState === "saving" && (
+          <div className="mt-1">
+            <span className="t-datum text-muted-ink">saving…</span>
+          </div>
+        )}
       </div>
 
       {/* body — editor surface (port; CodeMirror is the default adapter) */}

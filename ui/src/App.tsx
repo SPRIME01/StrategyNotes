@@ -1,44 +1,89 @@
-import { useState, useEffect, useMemo, type ReactNode } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
-import { Badge } from "./components/ui/badge";
-import { Button } from "./components/ui/button";
-import {
-  GateStatusBadge, ProofLevelBadge, NodeTypeBadge, EvidenceStateBadge,
-  PomoCostBadge, MaturityChip, ContradictionBadge, SectionLabel, CapacityMeter,
-} from "./atoms";
-import { api, type GateResult } from "./api";
+// App shell — routes to a view, owns the workspace bar and the shortcuts.
+//
+// DESIGN.md §7/§8: one layout family per view, real hash routes, no chrome
+// theater. The old 932-line file mixed nine views into one component, which is
+// precisely why every surface looked the same. Each view now lives in views/ and
+// belongs to a declared layout family.
+
+import { useState } from "react";
 import { Sidebar, type ViewId } from "./components/layout/Sidebar";
-import { CaseSelector } from "./components/layout/CaseSelector";
+import { AppShell, PageBody, WorkspaceBar } from "./components/layout/AppShell";
+import { PageHead, useHashRoute } from "./components/layout/PageHead";
+import { ToastProvider, useToast } from "./components/ui/toast";
+import { ShortcutsHelp, useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { useWorkspace } from "./hooks/useWorkspace";
+import { api } from "./api";
+
 import { NotesScreen } from "./views/NotesScreen";
 import { JournalView } from "./views/JournalView";
+import { CockpitView } from "./views/CockpitView";
+import { EvidenceInbox } from "./views/EvidenceInbox";
 import { DocBrowser } from "./views/DocBrowser";
-import { useKeyboardShortcuts, ShortcutsHelp } from "./hooks/useKeyboardShortcuts";
-import { useTypedNodes, useNode } from "./hooks/useTypedNodes";
-import {
-  fmString, fmList, fmBool, nodeTitle, nodeExcerpt, fmFilled, type GraphNode,
-} from "./lib/node";
-import { cn } from "./lib/utils";
+import { BetBoard } from "./views/BetBoard";
+import { TraceExplorer } from "./views/TraceExplorer";
+import { WorkPlanner } from "./views/WorkPlanner";
+import { CalendarView } from "./views/CalendarView";
+import { ExecutionRunbook } from "./views/ExecutionRunbook";
+import { DaynoteLedger } from "./views/DaynoteLedger";
+import { ValueView } from "./views/ValueView";
+import { AgentDrafts } from "./views/AgentDrafts";
+import { FacetPage, type FacetDim } from "./views/FacetPage";
+import { NodePage } from "./views/NodePage";
 
-const POMOS_AVAILABLE = 24; // ponytail: per-cycle capacity budget; make configurable later
+const VALID: ViewId[] = [
+  "notes", "journal", "cockpit", "evidence", "docs", "bets",
+  "trace", "work", "calendar", "runbook", "daynote", "vrd", "agent",
+];
 
-// ─── shell ───
+/**
+ * Two routes are not nav destinations — they are *derived* pages reached by
+ * clicking a status, a tag, or a node:
+ *
+ *   #facet/<dim>/<value>   everything carrying that status / type / tag
+ *   #node/<ulid>           one node, its references both ways
+ *
+ * They render inside the shell (so Back, the rail and the workspace bar still
+ * work) but the rail keeps `cockpit` current, because neither is a place you
+ * navigate to — you arrive at one by following a link out of something else.
+ */
+type Derived =
+  | { kind: "facet"; dim: FacetDim; value: string }
+  | { kind: "node"; id: string }
+  | null;
+
+function parseDerived(route: string): Derived {
+  if (route.startsWith("facet/")) {
+    const [, dim, ...rest] = route.split("/");
+    const value = decodeURIComponent(rest.join("/"));
+    if ((dim === "status" || dim === "type" || dim === "tag") && value) {
+      return { kind: "facet", dim, value };
+    }
+    return null;
+  }
+  if (route.startsWith("node/")) {
+    const id = route.slice("node/".length);
+    return id ? { kind: "node", id } : null;
+  }
+  return null;
+}
 
 export function App() {
-  const [view, setView] = useState<ViewId>("cockpit");
+  return (
+    <ToastProvider>
+      <Shell />
+    </ToastProvider>
+  );
+}
+
+function Shell() {
+  const [view, navigate] = useHashRoute<ViewId>("cockpit");
+  const ws = useWorkspace();
+  const { notify } = useToast();
   const [pendingNoteId, setPendingNoteId] = useState<string | null>(null);
-  const [caseId, setCaseId] = useState<string | null>(null);
 
-  const timeboxes = useTypedNodes("timebox");
-  const workPackages = useTypedNodes("work_package");
-
-  const committedPomos = useMemo(() => {
-    const tb = timeboxes.nodes.reduce((s, t) => s + Number(fmString(t, "pomos") || 1), 0);
-    const wp = workPackages.nodes.reduce((s, w) => {
-      const isCommitted = fmBool(w, "committed") || fmString(w, "status").toLowerCase() === "committed";
-      return isCommitted ? s + (Number(fmString(w, "pomos")) || 1) : s;
-    }, 0);
-    return Math.max(tb, wp);
-  }, [timeboxes.nodes, workPackages.nodes]);
+  // An unknown hash should not blank the app.
+  const derived = parseDerived(view);
+  const active: ViewId = VALID.includes(view) ? view : "cockpit";
 
   const { helpOpen, setHelpOpen, shortcuts } = useKeyboardShortcuts([
     {
@@ -49,884 +94,82 @@ export function App() {
         try {
           const n = await api.createNote("Untitled note");
           setPendingNoteId(String(n.id));
-        } catch { /* backend not running */ }
-        setView("notes");
+          notify("Note created.", "ok");
+        } catch {
+          // Never silently swallow: say what happened instead of navigating away.
+          notify("Could not create a note. The local server did not respond.", "bad");
+          return;
+        }
+        navigate("notes");
       },
     },
     {
       combo: "mod+j",
       description: "Go to today's journal",
       allowInInput: true,
-      action: () => setView("journal"),
+      action: () => navigate("journal"),
     },
   ]);
 
-  // Editor screens render their own full 3-panel EditorLayout.
-  if (view === "notes") return <NotesScreen onSelectView={setView} initialNoteId={pendingNoteId} />;
-  if (view === "journal") return <JournalView onSelectView={setView} />;
-
-  return (
-    <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
-      <Sidebar active={view} onSelect={setView} onNewPage={() => setView("notes")} />
-
-      <div className="flex flex-1 flex-col">
-        <header className="flex h-12 items-center gap-4 border-b bg-surface-1 px-4">
-          <div className="flex flex-1 items-center gap-2 text-sm text-muted-foreground">
-            <span className="text-muted-ink">markdown is the source of truth — everything else is generated</span>
-          </div>
-          <CaseSelector caseId={caseId} onChange={setCaseId} />
-          <CapacityMeter committed={committedPomos} available={POMOS_AVAILABLE} />
-        </header>
-
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="mx-auto max-w-[1340px]">
-            {view === "cockpit" && <CaseCockpit caseId={caseId} />}
-            {view === "evidence" && <EvidenceInbox />}
-            {view === "docs" && <DocBrowser caseId={caseId} />}
-            {view === "bets" && <BetBoard />}
-            {view === "trace" && <TraceExplorer />}
-            {view === "work" && <WorkPlanner />}
-            {view === "runbook" && <ExecutionRunbook />}
-            {view === "daynote" && <DaynoteLedger />}
-            {view === "vrd" && <VrdView />}
-            {view === "agent" && <AgentDraftInbox />}
-          </div>
-        </main>
-      </div>
-
-      <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} shortcuts={shortcuts} />
-    </div>
-  );
-}
-
-// ─── shared page chrome ───
-
-function PageHead({ kicker, title, sub }: { kicker: string; title: string; sub?: string }) {
-  return (
-    <div className="mb-5">
-      <div className="text-[10px] font-mono font-semibold uppercase tracking-[0.1em] text-muted-ink">{kicker}</div>
-      <h1 className="text-2xl font-normal tracking-tight" style={{ fontFamily: "var(--font-display)" }}>{title}</h1>
-      {sub && <p className="mt-1 text-sm text-muted-foreground">{sub}</p>}
-    </div>
-  );
-}
-
-function Panel({ title, children, action }: { title?: string; children: ReactNode; action?: ReactNode }) {
-  return (
-    <Card>
-      {title && (
-        <CardHeader className="flex-row items-center justify-between">
-          <CardTitle className="text-sm">{title}</CardTitle>
-          {action}
-        </CardHeader>
-      )}
-      <CardContent>{children}</CardContent>
-    </Card>
-  );
-}
-
-function LoadingRow({ label }: { label: string }) {
-  return <p className="text-sm text-muted-ink">Loading {label}…</p>;
-}
-
-// Honest empty state — never fake data (RISK-001 guardrail).
-function EmptyState({ noun, hint }: { noun: string; hint?: string }) {
-  return (
-    <Card>
-      <CardContent className="py-8 text-center">
-        <p className="text-muted-foreground">No {noun} yet{hint ? ` — ${hint}` : ""}.</p>
-        <p className="mt-1 text-xs text-faint">Start the backend, or create one from the Notes screen and set its type.</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ─── 1. Case Cockpit — projection over strategy_case + evidence/bet/timebox ───
-
-const STAGES = ["establish_reality", "define_outcomes", "develop_logic", "choose_and_bet", "design_execution", "validate", "realize_value", "review"];
-const ARTIFACT_TYPES = ["erd", "ord", "sld", "eds", "vsd", "vrd"] as const;
-
-function CaseCockpit({ caseId }: { caseId?: string | null }) {
-  const cases = useTypedNodes("strategy_case");
-  const evidence = useTypedNodes("evidence_item");
-  const claims = useTypedNodes("strategic_claim");
-  const bets = useTypedNodes("strategy_bet");
-  const timeboxes = useTypedNodes("timebox");
-
-  // Honor the selected case; fall back to the first case (workspace default).
-  const c = (caseId ? cases.nodes.find((n) => n.id === caseId) : null) ?? cases.nodes[0];
-  const stageIdx = c ? Math.max(0, STAGES.indexOf(fmString(c, "phase"))) : -1;
-
-  const draftedEvidence = evidence.nodes.filter((e) => fmString(e, "status").toLowerCase() !== "accepted").length;
-  const claimsLackProof = claims.nodes.filter((cl) => fmList(cl, "supports").length === 0).length;
-  const betsLackKill = bets.nodes.filter((b) => !fmFilled(b, "kill_criteria")).length;
-  const committedPomos = timeboxes.nodes.reduce((s, t) => s + Number(fmString(t, "pomos") || 0), 0);
-
-  if (cases.loading) return <LoadingRow label="case" />;
-  if (!c) return <EmptyState noun="strategy case" hint="create one via the API (POST /api/cases)" />;
-
-  return (
-    <div className="flex flex-col gap-5">
-      <PageHead
-        kicker={`CASE · ${c.id.slice(0, 14)}`}
-        title={nodeTitle(c)}
-        sub={`Owner: ${fmString(c, "owner") || "—"} · Arena: ${fmString(c, "arena") || "—"}`}
+  // The editor screens own their own full 3-panel layout (DESIGN.md §9).
+  if (active === "notes") {
+    return (
+      <NotesScreen
+        onSelectView={navigate}
+        initialNoteId={pendingNoteId}
+        onCreated={() => setPendingNoteId(null)}
       />
-
-      <Panel title="Lifecycle">
-        <div className="flex flex-wrap items-center gap-1">
-          {STAGES.map((s, i) => (
-            <div key={s} className="flex items-center">
-              <div className={`rounded-md px-2 py-1 text-[10px] font-mono uppercase tracking-wider ${
-                i < stageIdx ? "bg-gate-ok-bg text-gate-ok" : i === stageIdx ? "bg-primary text-primary-foreground" : "bg-secondary text-faint"
-              }`}>
-                {i < stageIdx ? "✓ " : ""}{s.replace(/_/g, " ")}
-              </div>
-              {i < STAGES.length - 1 && <div className="h-px w-3 bg-border" />}
-            </div>
-          ))}
-        </div>
-      </Panel>
-
-      <div className="grid grid-cols-3 gap-4">
-        <ArtifactsPanel />
-        <Panel title="Evidence Debt">
-          <div className="flex flex-col gap-1.5">
-            <DebtRow n={draftedEvidence} tone={draftedEvidence ? "bad" : "ok"} label="drafted, not accepted" />
-            <DebtRow n={claimsLackProof} tone={claimsLackProof ? "warn" : "ok"} label="claims lack proof" />
-            <DebtRow n={betsLackKill} tone={betsLackKill ? "warn" : "ok"} label="bets lack kill criteria" />
-          </div>
-        </Panel>
-        <Panel title="Strategy Capacity">
-          <div className="flex flex-col gap-2">
-            <CapacityMeter committed={committedPomos} available={POMOS_AVAILABLE} />
-            <p className="text-xs text-muted-foreground">{committedPomos} of {POMOS_AVAILABLE} pomos committed this cycle.</p>
-          </div>
-        </Panel>
-      </div>
-
-      <NextBestAction draftedEvidence={draftedEvidence} betsLackKill={betsLackKill} bets={bets.nodes} />
-    </div>
-  );
-}
-
-function DebtRow({ n, tone, label }: { n: number; tone: "ok" | "warn" | "bad"; label: string }) {
-  const cls = tone === "bad" ? "text-gate-bad" : tone === "warn" ? "text-gate-warn" : "text-gate-ok";
-  return (
-    <div className="flex items-baseline gap-2">
-      <span className={`text-3xl font-normal tabular ${cls}`} style={{ fontFamily: "var(--font-display)" }}>{n}</span>
-      <span className="text-sm text-muted-foreground">{label}</span>
-    </div>
-  );
-}
-
-function ArtifactsPanel() {
-  const [presence, setPresence] = useState<Record<string, boolean>>({});
-  useTypePresence(ARTIFACT_TYPES, setPresence);
-  return (
-    <Panel title="Artifacts">
-      <div className="flex flex-col gap-2">
-        {ARTIFACT_TYPES.map((t) => (
-          <div key={t} className="flex items-center justify-between">
-            <span className="text-sm uppercase text-muted-foreground">{t}</span>
-            {presence[t]
-              ? <MaturityChip maturity="Drafted" />
-              : <span className="text-faint">—</span>}
-          </div>
-        ))}
-      </div>
-    </Panel>
-  );
-}
-
-// Fetch only existence (IDs) for a set of types — cheap, no per-node resolve.
-function useTypePresence(types: readonly string[], set: (m: Record<string, boolean>) => void) {
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const entries = await Promise.all(types.map(async (t) => {
-        try { const ids = await api.nodesByType(t); return [t, ids.length > 0] as const; }
-        catch { return [t, false] as const; }
-      }));
-      if (alive) set(Object.fromEntries(entries));
-    })();
-    return () => { alive = false; };
-  }, [types, set]);
-}
-
-function NextBestAction({ draftedEvidence, betsLackKill, bets }: { draftedEvidence: number; betsLackKill: number; bets: GraphNode[] }) {
-  let msg = "Case is in good shape — keep capturing evidence and timeboxing work.";
-  if (draftedEvidence > 0) msg = `${draftedEvidence} drafted evidence item${draftedEvidence > 1 ? "s" : ""} not yet accepted. Accept or reject them to close the reality gap.`;
-  else if (betsLackKill > 0) {
-    const b = bets.find((x) => !fmFilled(x, "kill_criteria"));
-    msg = `Your bet "${b ? nodeTitle(b) : "?"}" lacks kill criteria. Fill the INV-BET requirements to unlock approval.`;
+    );
   }
-  return (
-    <Card className="border-primary/40 bg-primary/5">
-      <CardContent className="py-4">
-        <SectionLabel>Next Best Action</SectionLabel>
-        <p className="mt-1 text-lg" style={{ fontFamily: "var(--font-display)" }}>{msg}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ─── 2. Evidence Inbox ───
-
-function EvidenceInbox() {
-  const { nodes, loading, reload } = useTypedNodes("evidence_item");
-  const [gate, setGate] = useState<Record<string, GateResult>>({});
-
-  const accept = async (id: string) => {
-    try {
-      const r = await api.acceptEvidence(id);
-      setGate((g) => ({ ...g, [id]: r }));
-      reload();
-    } catch {
-      setGate((g) => ({ ...g, [id]: { status: "blocked", failed_gates: ["unreachable"] } }));
-    }
-  };
-
-  if (loading) return <PageWithHead kicker="REALITY" title="Evidence Inbox"><LoadingRow label="evidence" /></PageWithHead>;
-  if (nodes.length === 0) return <PageWithHead kicker="REALITY" title="Evidence Inbox"><EmptyState noun="evidence" /></PageWithHead>;
+  if (active === "journal") {
+    return <JournalView onSelectView={navigate} />;
+  }
 
   return (
-    <PageWithHead kicker="REALITY" title="Evidence Inbox" sub="Triage draft evidence. The gap between Drafted and Accepted is the work.">
-      <div className="flex flex-col gap-2">
-        {nodes.map((e) => {
-          const status = fmString(e, "status");
-          const isDraft = status.toLowerCase() === "drafted";
-          return (
-            <Card key={e.id} className={isDraft ? "border-dashed border-gate-warn/40" : ""}>
-              <CardContent className="flex items-start gap-3 py-3">
-                <div className="flex flex-1 flex-col gap-1">
-                  <div className="flex items-center gap-2">
-                    <ProofLevelBadge level={fmString(e, "proof_level", "—")} />
-                    <EvidenceStateBadge state={status} />
-                    {fmFilled(e, "source_chunk") && <Badge variant="outline" className="text-[10px] font-mono">{fmString(e, "source_chunk").slice(0, 12)}</Badge>}
-                  </div>
-                  <p className="text-sm">{nodeExcerpt(e)}</p>
-                </div>
-                {isDraft && <Button size="sm" variant="outline" onClick={() => accept(e.id)}>Accept</Button>}
-                <GateStatusBadge gate={gate[e.id] ?? null} />
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-    </PageWithHead>
-  );
-}
-
-// ─── 3. Bet Board ───
-
-const BET_REQS: [string, string][] = [
-  ["linked_choice", "linked choice"],
-  ["assumptions", "assumptions"],
-  ["counterevidence_reviewed", "counterevidence reviewed"],
-  ["success_metric", "success metric"],
-  ["kill_criteria", "kill criteria"],
-  ["owner", "owner"],
-];
-
-function BetBoard() {
-  const { nodes, loading, reload } = useTypedNodes("strategy_bet");
-  const [gate, setGate] = useState<Record<string, GateResult>>({});
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<{
-    owner: string;
-    kill_criteria: string;
-    success_metric: string;
-    assumptions: string;
-    counterevidence_reviewed: boolean;
-  }>({
-    owner: "",
-    kill_criteria: "",
-    success_metric: "",
-    assumptions: "",
-    counterevidence_reviewed: false,
-  });
-
-  const cols = [
-    { id: "draft", label: "Draft" }, { id: "blocked", label: "Blocked" },
-    { id: "approved", label: "Approved" }, { id: "killed", label: "Killed" },
-  ];
-
-  const getCol = (b: GraphNode) => {
-    const st = fmString(b, "status").toLowerCase();
-    if (st === "approved") return "approved";
-    if (st === "killed") return "killed";
-    if (st === "blocked" || gate[b.id]?.status === "blocked") return "blocked";
-    return "draft";
-  };
-
-  const approve = async (b: GraphNode) => {
-    try {
-      const r = await api.approveBet(b.id);
-      setGate((g) => ({ ...g, [b.id]: r }));
-    } catch {
-      setGate((g) => ({ ...g, [b.id]: { status: "blocked", failed_gates: ["unreachable"] } }));
-    }
-    reload();
-  };
-
-  const kill = async (b: GraphNode) => {
-    try {
-      await api.patchNode(b.id, { frontmatter: { ...b.frontmatter, status: "killed" } });
-      reload();
-    } catch (e) {
-      alert("Failed to kill bet: " + e);
-    }
-  };
-
-  const startEdit = (b: GraphNode) => {
-    setEditingId(b.id);
-    setEditForm({
-      owner: fmString(b, "owner"),
-      kill_criteria: fmString(b, "kill_criteria"),
-      success_metric: fmString(b, "success_metric"),
-      assumptions: fmList(b, "assumptions").join(", "),
-      counterevidence_reviewed: fmBool(b, "counterevidence_reviewed"),
-    });
-  };
-
-  const saveEdit = async (b: GraphNode) => {
-    try {
-      const fm = {
-        ...b.frontmatter,
-        owner: editForm.owner,
-        kill_criteria: editForm.kill_criteria,
-        success_metric: editForm.success_metric,
-        assumptions: editForm.assumptions.split(",").map((s) => s.trim()).filter(Boolean),
-        counterevidence_reviewed: editForm.counterevidence_reviewed,
-      };
-      await api.patchNode(b.id, { frontmatter: fm });
-      setEditingId(null);
-      reload();
-    } catch (e) {
-      alert("Failed to update bet requirements: " + e);
-    }
-  };
-
-  if (loading) return <PageWithHead kicker="STRATEGY" title="Bet Board"><LoadingRow label="bets" /></PageWithHead>;
-
-  return (
-    <PageWithHead kicker="STRATEGY" title="Bet Board" sub="Every bet must pass the INV-BET gate before approval. A blocked bet looks blocked.">
-      {nodes.length === 0 ? <EmptyState noun="bets" /> : (
-        <div className="grid grid-cols-4 gap-4">
-          {cols.map((col) => (
-            <div key={col.id} className="flex flex-col gap-2">
-              <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-muted-ink">{col.label}</div>
-              {nodes.filter((b) => getCol(b) === col.id).map((b) => (
-                <Card key={b.id} className={col.id === "blocked" ? "border-gate-bad/40" : col.id === "approved" ? "border-gate-ok/30" : col.id === "killed" ? "opacity-60" : ""}>
-                  <CardContent className="flex flex-col gap-2 py-3">
-                    <p className="text-sm font-medium">{nodeExcerpt(b)}</p>
-                    
-                    {editingId === b.id ? (
-                      <div className="flex flex-col gap-1.5 border-t pt-2 text-xs">
-                        <label className="font-semibold text-muted-ink">Owner</label>
-                        <input
-                          value={editForm.owner}
-                          onChange={(e) => setEditForm((f) => ({ ...f, owner: e.target.value }))}
-                          placeholder="e.g. Lead Strategist"
-                          className="rounded border bg-surface-2 px-1.5 py-1 text-xs"
-                        />
-                        <label className="font-semibold text-muted-ink">Success Metric</label>
-                        <input
-                          value={editForm.success_metric}
-                          onChange={(e) => setEditForm((f) => ({ ...f, success_metric: e.target.value }))}
-                          placeholder="e.g. 5 pilot customers in 30d"
-                          className="rounded border bg-surface-2 px-1.5 py-1 text-xs"
-                        />
-                        <label className="font-semibold text-muted-ink">Kill Criteria</label>
-                        <input
-                          value={editForm.kill_criteria}
-                          onChange={(e) => setEditForm((f) => ({ ...f, kill_criteria: e.target.value }))}
-                          placeholder="e.g. <3 signups after 20 interviews"
-                          className="rounded border bg-surface-2 px-1.5 py-1 text-xs"
-                        />
-                        <label className="font-semibold text-muted-ink">Assumptions (comma-separated)</label>
-                        <input
-                          value={editForm.assumptions}
-                          onChange={(e) => setEditForm((f) => ({ ...f, assumptions: e.target.value }))}
-                          placeholder="speed matters most, founders build fast"
-                          className="rounded border bg-surface-2 px-1.5 py-1 text-xs"
-                        />
-                        <label className="flex items-center gap-2 mt-1">
-                          <input
-                            type="checkbox"
-                            checked={editForm.counterevidence_reviewed}
-                            onChange={(e) => setEditForm((f) => ({ ...f, counterevidence_reviewed: e.target.checked }))}
-                          />
-                          <span>Counterevidence reviewed</span>
-                        </label>
-                        <div className="flex gap-1.5 mt-2">
-                          <Button size="sm" onClick={() => saveEdit(b)}>Save</Button>
-                          <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>Cancel</Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex flex-col gap-1">
-                          {BET_REQS.map(([key, label]) => {
-                            const filled = key === "assumptions" ? fmList(b, key).length > 0 : key === "counterevidence_reviewed" ? fmBool(b, key) : fmFilled(b, key);
-                            return (
-                              <div key={label} className="flex items-center gap-1.5 text-[11px]">
-                                <span className={filled ? "text-gate-ok" : "text-gate-bad"}>{filled ? "✓" : "✕"}</span>
-                                <span className={filled ? "text-muted-foreground" : "text-gate-bad"}>{label}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                          {(col.id === "draft" || col.id === "blocked") && (
-                            <Button size="sm" variant="outline" onClick={() => approve(b)}>Approve [INV-BET]</Button>
-                          )}
-                          {col.id !== "approved" && col.id !== "killed" && (
-                            <Button size="sm" variant="ghost" onClick={() => startEdit(b)}>Edit</Button>
-                          )}
-                          {col.id !== "killed" && (
-                            <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => kill(b)}>Kill</Button>
-                          )}
-                        </div>
-                        <GateStatusBadge gate={gate[b.id] ?? null} />
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-    </PageWithHead>
-  );
-}
-
-// ─── 4. Trace Explorer — walks typed edges from a chosen root ───
-
-function TraceExplorer() {
-  const { nodes: roots, loading } = useTypedNodes("strategy_bet");
-  const claims = useTypedNodes("strategic_claim");
-  const [rootId, setRootId] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [trace, setTrace] = useState<string[]>([]);
-  const [tracing, setTracing] = useState(false);
-
-  const id = rootId ?? roots[0]?.id ?? null;
-  useTrace(id, setTrace, setTracing);
-
-  const selectedNode = useNode(selectedId);
-
-  // Discover real contradictions from claims or trace nodes
-  const contradictions = useMemo(() => {
-    return claims.nodes.filter((c) => fmList(c, "contradicts").length > 0);
-  }, [claims.nodes]);
-
-  return (
-    <PageWithHead kicker="STRATEGY" title="Trace Explorer" sub="Source → evidence → claim → bet → work → timebox → review → value. Counterevidence stays visible.">
-      {loading ? <LoadingRow label="roots" /> : roots.length === 0 ? <EmptyState noun="traceable nodes" hint="draft a bet first" /> : (
-        <div className="mb-3 flex items-center gap-2 text-xs">
-          <span className="text-muted-ink">root:</span>
-          <select value={id ?? ""} onChange={(e) => { setRootId(e.target.value); setSelectedId(null); }} className="rounded-md border bg-surface-1 px-2 py-1 text-xs">
-            {roots.map((r) => <option key={r.id} value={r.id}>{nodeTitle(r)}</option>)}
-          </select>
-        </div>
-      )}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Panel title="Reachable from root">
-          {tracing ? <LoadingRow label="trace" /> : trace.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No reachable nodes (or root has no outgoing typed edges yet).</p>
-          ) : (
-            <div className="flex flex-col gap-1 font-mono text-xs">
-              {trace.map((tid) => (
-                <TraceLine
-                  key={tid}
-                  id={tid}
-                  selected={tid === selectedId}
-                  onClick={() => setSelectedId(tid === selectedId ? null : tid)}
-                />
-              ))}
-            </div>
-          )}
-        </Panel>
-
-        <Panel title={selectedId ? `Node Inspection · ${selectedId.slice(0, 10)}` : "Node Inspection"}>
-          {selectedId && selectedNode.node ? (
-            <div className="flex flex-col gap-2 text-xs">
-              <div className="flex items-center gap-2">
-                <NodeTypeBadge type={selectedNode.node.type} />
-                <span className="font-semibold">{nodeTitle(selectedNode.node)}</span>
-              </div>
-              <p className="text-muted-foreground">{nodeExcerpt(selectedNode.node, 200)}</p>
-              <div className="rounded border bg-surface-2 p-2 font-mono text-[11px]">
-                <div className="text-muted-ink">Frontmatter:</div>
-                <pre className="overflow-x-auto">{JSON.stringify(selectedNode.node.frontmatter, null, 2)}</pre>
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">Click any node in the reachable spine to inspect its details and frontmatter edges.</p>
-          )}
-        </Panel>
-      </div>
-
-      <div className="mt-4">
-        <Panel title="Counterevidence (INV-CONTRA)">
-          {contradictions.length > 0 ? (
-            <div className="flex flex-col gap-2">
-              {contradictions.map((c) => (
-                <div key={c.id} className="flex items-center gap-2 text-sm rounded border border-gate-warn/40 p-2 bg-surface-2">
-                  <ContradictionBadge />
-                  <span className="font-medium text-foreground">{nodeTitle(c)}</span>
-                  <span className="text-muted-ink">contradicts:</span>
-                  <span className="font-mono text-xs text-gate-bad">{fmList(c, "contradicts").join(", ")}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-sm">
-              <ContradictionBadge />
-              <span className="text-muted-foreground">No active contradictions found. Outgoing <code>contradicts</code> edges surface here automatically.</span>
-            </div>
-          )}
-        </Panel>
-      </div>
-    </PageWithHead>
-  );
-}
-
-function TraceLine({ id, selected, onClick }: { id: string; selected?: boolean; onClick?: () => void }) {
-  const { node } = useNode(id);
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors",
-        selected ? "bg-primary/10 border border-primary/40 text-foreground" : "hover:bg-secondary text-foreground",
-      )}
-    >
-      <NodeTypeBadge type={node ? node.type : "—"} />
-      <span className="truncate">{node ? nodeTitle(node) : id}</span>
-      <span className="ml-auto text-faint">{id.slice(0, 18)}</span>
-    </button>
-  );
-}
-
-// ponytail: tiny effect wrapper to re-fetch trace when id changes.
-function useTrace(id: string | null, setTrace: (s: string[]) => void, setTracing: (b: boolean) => void) {
-  useOncePerValue(id, () => {
-    if (!id) { setTrace([]); return; }
-    setTracing(true);
-    api.trace(id).then((t) => setTrace(t.reachable)).catch(() => setTrace([])).finally(() => setTracing(false));
-  });
-}
-
-// ─── 5. Work Planner ───
-
-function WorkPlanner() {
-  const { nodes, loading, reload } = useTypedNodes("work_package");
-  const [gate, setGate] = useState<Record<string, GateResult>>({});
-
-  const commitWp = async (id: string) => {
-    try {
-      const res = await api.commitWorkPackage(id);
-      setGate((g) => ({ ...g, [id]: res }));
-      reload();
-    } catch {
-      setGate((g) => ({ ...g, [id]: { status: "blocked", failed_gates: ["unreachable"] } }));
-    }
-  };
-
-  const scheduleWp = async (w: GraphNode) => {
-    try {
-      const pomos = Number(fmString(w, "pomos")) || 1;
-      await api.scheduleTimebox(w.id, pomos, `Execution for ${nodeTitle(w)}`);
-      reload();
-      alert(`Scheduled ${pomos}-pomo timebox for work package!`);
-    } catch (e) {
-      alert("Failed to schedule timebox: " + e);
-    }
-  };
-
-  if (loading) return <PageWithHead kicker="EXECUTION" title="Work / Timebox Planner"><LoadingRow label="work packages" /></PageWithHead>;
-  return (
-    <PageWithHead kicker="EXECUTION" title="Work / Timebox Planner" sub="No timebox = not committed (INV-TIME). A wish, not work.">
-      {nodes.length === 0 ? <EmptyState noun="work packages" /> : (
-        <div className="flex flex-col gap-3">
-          {nodes.map((w) => {
-            const status = fmString(w, "status");
-            const committed = status.toLowerCase() === "committed";
-            return (
-              <Card key={w.id}>
-                <CardContent className="py-3">
-                  <div className="flex items-center gap-2">
-                    <NodeTypeBadge type="work_package" />
-                    <Badge variant={committed ? "gate-ok" : "gate-warn"}>{status || "Intent"}</Badge>
-                    <span className="text-sm font-medium">{nodeExcerpt(w)}</span>
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                    <PomoCostBadge pomos={Number(fmString(w, "pomos")) || 0} />
-                    {fmFilled(w, "linked_bet") && <Badge variant="outline" className="text-[10px]">bet: {fmString(w, "linked_bet").slice(0, 12)}</Badge>}
-                    {committed
-                      ? <Badge variant="gate-ok" className="text-[10px]">▣ timebox committed</Badge>
-                      : <Badge variant="gate-warn" className="border-dashed text-[10px]">◇ no timebox — it's a wish</Badge>}
-                    <div className="ml-auto flex items-center gap-2">
-                      {!committed && (
-                        <Button size="sm" variant="outline" onClick={() => commitWp(w.id)}>
-                          Commit [INV-WORK]
-                        </Button>
-                      )}
-                      <Button size="sm" variant="outline" onClick={() => scheduleWp(w)}>
-                        Schedule Timebox [INV-TIME]
-                      </Button>
-                    </div>
-                  </div>
-                  {gate[w.id] && (
-                    <div className="mt-2">
-                      <GateStatusBadge gate={gate[w.id]} />
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-    </PageWithHead>
-  );
-}
-
-// ─── 6. Execution Runbook ───
-
-function ExecutionRunbook() {
-  const { nodes, loading, reload } = useTypedNodes("timebox");
-  const [captures, setCaptures] = useState<string[]>([]);
-  const [reviewResult, setReviewResult] = useState<string | null>(null);
-
-  const active = nodes.find((t) => fmString(t, "status").toLowerCase() === "committed");
-
-  const capture = (type: string) => {
-    const text = prompt(`Enter ${type} details:`);
-    if (!text) return;
-    const entry = `[${type.toUpperCase()}] ${text} (${new Date().toLocaleTimeString()})`;
-    setCaptures((prev) => [...prev, entry]);
-  };
-
-  const handleReview = async () => {
-    if (!active) return;
-    try {
-      const res = await api.reviewTimebox(active.id, 1, [], "Next cycle planned", "full");
-      setReviewResult(res.gate.status === "approved" ? "Timebox review verified and completed [INV-REVIEW]!" : "Review gate blocked");
-      reload();
-    } catch (e) {
-      setReviewResult("Review failed: " + e);
-    }
-  };
-
-  const handleQuickSchedule = async () => {
-    try {
-      await api.scheduleTimebox("demo-wp", 1, "Quick execution block");
-      reload();
-    } catch (e) {
-      alert("Failed to schedule timebox: " + e);
-    }
-  };
-
-  if (loading) return <PageWithHead kicker="EXECUTION" title="Execution Runbook"><LoadingRow label="timeboxes" /></PageWithHead>;
-  return (
-    <PageWithHead kicker="EXECUTION" title="Execution Runbook" sub="Low-decision mode. Capture ideas, don't mutate strategy mid-execution (INV-EXEC).">
-      {active ? (
-        <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-4">
-            <Panel title="Work Package"><p className="text-sm font-mono">{fmString(active, "work_package")}</p></Panel>
-            <Panel title="Expected Output"><p className="text-sm">{fmString(active, "expected_output") || "—"}</p></Panel>
-            <Panel title="Method"><p className="text-sm">Build the smallest end-to-end path; capture ideas in the bar below.</p></Panel>
-            <Panel title="Capture Bar">
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="ghost" onClick={() => capture("idea")}>💡 Idea</Button>
-                <Button size="sm" variant="ghost" onClick={() => capture("blocker")}>⚠ Blocker</Button>
-                <Button size="sm" variant="ghost" onClick={() => capture("exception")}>⚡ Exception</Button>
-                <Button size="sm" variant="outline" onClick={() => capture("evidence")}>📎 Attach Evidence</Button>
-              </div>
-              {captures.length > 0 && (
-                <div className="mt-3 flex flex-col gap-1 border-t pt-2 font-mono text-xs text-muted-foreground">
-                  {captures.map((c, i) => <div key={i}>{c}</div>)}
-                </div>
-              )}
-            </Panel>
-          </div>
-
-          <Panel title="Verification & Review (INV-REVIEW)">
-            <div className="flex items-center gap-3">
-              <Button size="sm" variant="outline" onClick={handleReview}>
-                Complete Timebox Review [INV-REVIEW]
-              </Button>
-              {reviewResult && <span className="text-xs font-mono text-gate-ok">{reviewResult}</span>}
-            </div>
-          </Panel>
-        </div>
-      ) : (
-        <Card>
-          <CardContent className="py-8 text-center">
-            <p className="text-muted-foreground">No committed timebox active.</p>
-            <p className="mt-1 text-xs text-faint">Commit a work package or start a timebox to enter execution mode.</p>
-            <div className="mt-4">
-              <Button size="sm" variant="outline" onClick={handleQuickSchedule}>
-                Schedule 1-Pomo Timebox Now [INV-TIME]
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-    </PageWithHead>
-  );
-}
-
-// ─── 7. Daynote Ledger — vault-backed log (OKF log.md equivalent) ───
-
-function DaynoteLedger() {
-  const today = new Date().toISOString().slice(0, 10);
-  const [date, setDate] = useState(today);
-  const [content, setContent] = useState("");
-  const [loading, setLoading] = useState(true);
-
-  useDaynote(date, setContent, setLoading);
-
-  const lines = content.split("\n").filter((l) => l.trim());
-  return (
-    <PageWithHead kicker="LEARNING" title="Daynote Ledger" sub="Your calendar is evidence. Read it honestly. (OKF log.md)">
-      <div className="mb-3 flex items-center gap-2 text-xs">
-        <span className="text-muted-ink">date:</span>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-md border bg-surface-1 px-2 py-1 text-xs" />
-      </div>
-      <Panel>
-        {loading ? <LoadingRow label="daynote" /> : lines.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No activity recorded for {date}.</p>
-        ) : (
-          <pre className="font-mono text-xs leading-relaxed text-muted-foreground">{lines.join("\n")}</pre>
-        )}
-      </Panel>
-    </PageWithHead>
-  );
-}
-
-// ─── 8. VRD / Value ───
-
-function VrdView() {
-  const { nodes, loading, reload } = useTypedNodes("value_claim");
-  const [gate, setGate] = useState<Record<string, GateResult>>({});
-
-  const validate = async (id: string) => {
-    try {
-      const res = await api.validateValue(id);
-      setGate((prev) => ({ ...prev, [id]: res }));
-      reload();
-    } catch {
-      setGate((prev) => ({ ...prev, [id]: { status: "blocked", failed_gates: ["validation_error"] } }));
-    }
-  };
-
-  if (loading) return <PageWithHead kicker="LEARNING" title="VRD / Value Realization"><LoadingRow label="value claims" /></PageWithHead>;
-  return (
-    <PageWithHead kicker="LEARNING" title="VRD / Value Realization" sub="Weak claims surface as DEBT, never smoothed. INV-VALUE.">
-      {nodes.length === 0 ? <EmptyState noun="value claims" /> : (
-        <div className="flex flex-col gap-2">
-          {nodes.map((v) => {
-            const hasProof = fmList(v, "evidence_links").length > 0;
-            return (
-              <Card key={v.id} className={hasProof ? "border-gate-ok/30" : "border-gate-bad/40"}>
-                <CardContent className="flex items-start gap-3 py-3">
-                  <div className="flex flex-1 flex-col gap-1">
-                    <div className="flex items-center gap-2">
-                      <ProofLevelBadge level={fmString(v, "proof_level", "—")} />
-                      <Badge variant="outline">{fmString(v, "status", "Drafted")}</Badge>
-                    </div>
-                    <p className="text-sm">{nodeExcerpt(v)}</p>
-                    {!hasProof && <p className="text-xs text-gate-bad">PROOF DEBT: no evidence links (INV-VALUE)</p>}
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <Button size="sm" variant="outline" onClick={() => validate(v.id)}>
-                      Validate [INV-VALUE]
-                    </Button>
-                    <GateStatusBadge gate={gate[v.id] ?? null} />
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-    </PageWithHead>
-  );
-}
-
-// ─── 9. Agent Draft Inbox ───
-
-function AgentDraftInbox() {
-  const { nodes, loading, reload } = useTypedNodes("agent_run");
-  const [reviewer, setReviewer] = useState("Strategist");
-
-  if (loading) return <PageWithHead kicker="GOVERNANCE" title="Agent Draft Inbox"><LoadingRow label="agent runs" /></PageWithHead>;
-  return (
-    <PageWithHead kicker="GOVERNANCE" title="Agent Draft Inbox" sub="INV-HUMAN: agent output is draft-only until a human approves.">
-      <div className="mb-3 flex items-center gap-2 text-xs">
-        <span className="text-muted-ink">Reviewer:</span>
-        <input
-          value={reviewer}
-          onChange={(e) => setReviewer(e.target.value)}
-          placeholder="Reviewer name"
-          className="w-32 rounded border bg-surface-2 px-2 py-1 text-xs"
+    <AppShell
+      active={active}
+      onSelect={navigate}
+      onNewPage={() => navigate("notes")}
+      bar={
+        <WorkspaceBar
+          cases={ws.cases}
+          caseId={ws.caseId}
+          onCaseChange={ws.setCaseId}
+          committed={ws.committedPomos}
+          available={ws.capacityAvailable}
+          online={ws.online}
         />
-      </div>
-      {nodes.length === 0 ? <EmptyState noun="agent drafts" /> : (
-        <div className="flex flex-col gap-2">
-          {nodes.map((a) => (
-            <Card key={a.id} className="border-l-4 border-l-gate-warn">
-              <CardContent className="flex items-start gap-3 py-3">
-                <div className="flex flex-1 flex-col gap-1">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="gate-warn">{fmString(a, "agent", "agent")}</Badge>
-                    <Badge variant="outline">{fmString(a, "status", "Drafted")}</Badge>
-                  </div>
-                  <p className="text-sm">{nodeExcerpt(a)}</p>
-                  <p className="text-[11px] text-muted-ink">No auto-accept; reviewer required.</p>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Button size="sm" variant="outline" onClick={async () => { try { await api.acceptAgentRun(a.id, reviewer); reload(); } catch {} }}>Accept ({reviewer})</Button>
-                  <Button size="sm" variant="ghost" onClick={async () => { try { await api.rejectAgentRun(a.id); reload(); } catch {} }}>Reject</Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-    </PageWithHead>
+      }
+    >
+      <PageBody>
+        {derived?.kind === "facet" && <FacetPage dim={derived.dim} value={derived.value} />}
+        {derived?.kind === "node" && <NodePage id={derived.id} />}
+        {!derived && (
+          <>
+            {active === "cockpit" && (
+              <CockpitView onNavigate={navigate} committedPomos={ws.committedPomos} />
+            )}
+            {active === "evidence" && <EvidenceInbox />}
+            {active === "docs" && <DocBrowser caseId={ws.caseId} />}
+            {active === "bets" && <BetBoard caseId={ws.caseId} />}
+            {active === "trace" && <TraceExplorer />}
+            {active === "work" && <WorkPlanner caseId={ws.caseId} />}
+            {active === "calendar" && <CalendarView />}
+            {active === "runbook" && <ExecutionRunbook onNavigate={navigate} />}
+            {active === "daynote" && <DaynoteLedger />}
+            {active === "vrd" && <ValueView />}
+            {active === "agent" && <AgentDrafts />}
+          </>
+        )}
+      </PageBody>
+
+      <ShortcutsHelp
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        shortcuts={shortcuts}
+      />
+    </AppShell>
   );
 }
 
-// ─── shared view wrapper ───
-
-function PageWithHead({ kicker, title, sub, children }: { kicker: string; title: string; sub?: string; children: ReactNode }) {
-  return (
-    <div>
-      <PageHead kicker={kicker} title={title} sub={sub} />
-      {children}
-    </div>
-  );
-}
-
-// ─── ERD (generated) — folded into the DocBrowser (docSpecs.ts ERD spec) ───
-
-// ─── effect helpers (ponytail: avoid pulling in a heavier effect-per-deps lib) ───
-
-/** Run `fn` once when `value` changes (keyed effect). */
-function useOncePerValue(value: unknown, fn: () => void) {
-  useEffect(() => { fn(); }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
-}
-
-function useDaynote(date: string, setContent: (s: string) => void, setLoading: (b: boolean) => void) {
-  useEffect(() => {
-    setLoading(true);
-    api.daynote(date).then((d) => setContent(d.content || "")).catch(() => setContent("")).finally(() => setLoading(false));
-  }, [date]); // eslint-disable-line react-hooks/exhaustive-deps
-}
+export { PageHead, Sidebar };

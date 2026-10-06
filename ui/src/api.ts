@@ -1,16 +1,42 @@
 // Thin fetch client for the StrategyNotes HTTP API. The backend owns gates;
 // the UI only renders their results (SPEC sec 3.4 - UI never decides approval).
 
+import type { GraphNode } from "./lib/node";
+
 const BASE = import.meta.env.DEV
   ? "" // dev: vite proxy forwards /api to the server
   : "http://127.0.0.1:8787";
 
+// Every request is bounded. Without this, a hung backend (a socket that accepts
+// but never answers) leaves every view parked on its loading skeleton forever,
+// which reads as "there is no data" rather than "the server is stuck" — exactly
+// the uncertainty PRODUCT.md forbids.
+const REQUEST_TIMEOUT_MS = 8000;
+
+class RequestTimeout extends Error {
+  constructor(ms: number) {
+    super(`the local server did not respond within ${Math.round(ms / 1000)}s`);
+    this.name = "RequestTimeout";
+  }
+}
+
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") throw new RequestTimeout(REQUEST_TIMEOUT_MS);
+    throw new Error("the local server could not be reached");
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
     throw new Error(`${res.status} ${text}`);
@@ -58,11 +84,13 @@ export const api = {
     kind: string
   ) => call<WithId>("POST", "/api/evidence", { source_chunk: sourceChunk, text, proof_level: proofLevel, kind }),
   acceptEvidence: (id: string) => call<GateResult>("POST", `/api/evidence/${id}/accept`),
+  rejectEvidence: (id: string) => call<WithId>("POST", `/api/evidence/${id}/reject`),
   createClaim: (statement: string, proofLevel: string, supports: string[]) =>
     call<WithId>("POST", "/api/claims", { statement, proof_level: proofLevel, supports }),
   draftBet: (caseId: string, thesis: string) =>
     call<WithId>("POST", "/api/bets", { case: caseId, thesis }),
   approveBet: (id: string) => call<GateResult>("POST", `/api/bets/${id}/approve`),
+  killBet: (id: string) => call<WithId>("POST", `/api/bets/${id}/kill`),
   createWorkPackage: (caseId: string, linkedBet: string, objective: string) =>
     call<WithId>("POST", "/api/work-packages", { case: caseId, linked_bet: linkedBet, objective }),
   commitWorkPackage: (id: string) => call<GateResult>("POST", `/api/work-packages/${id}/commit`),
@@ -96,6 +124,10 @@ export const api = {
       evidence_links: evidenceLinks,
       next_action: nextAction,
     }),
+  /** SPEC sec 10.3. OQ-002 Option B: the ICS file IS the calendar integration —
+   *  no provider is contacted, so there is nothing here that can fail into
+   *  INV-CAL. Returns the whole commitment set as one VCALENDAR. */
+  exportIcs: () => call<{ ics: string }>("POST", "/api/calendar/ics/export"),
   claimValue: (
     caseId: string,
     statement: string,
@@ -115,6 +147,10 @@ export const api = {
   search: (q: string) => call<{ id: string; ty: string; excerpt: string }[]>("GET", `/api/search?q=${encodeURIComponent(q)}`),
   getNode: (id: string) => call<WithId & { body?: string }>("GET", `/api/node/${id}`),
   nodesByType: (ty: string) => call<string[]>("GET", `/api/nodes/${ty}`),
+  /** Every node in the vault, one round trip. Powers the derived pages:
+   *  "everything with this status / tag / type". Read-only projection of
+   *  markdown (INV-DUR) — never a second source of truth. */
+  allNodes: () => call<GraphNode[]>("GET", "/api/nodes"),
   createAgentRun: (agent: string, summary: string) =>
     call<WithId>("POST", "/api/agent-runs", { agent, summary }),
   acceptAgentRun: (id: string, reviewer: string) =>

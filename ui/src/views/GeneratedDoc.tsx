@@ -1,16 +1,16 @@
 // Generated documents — "living views over linked nodes" (framework §4368).
-// Each document is a DECLARATIVE QUERY over typed nodes, rendered as a dossier.
-// Not static files: regenerated from the graph every time. This is the OKF
-// index.md / Obsidian-Dataview model, strategy-native.
+// Each document is a DECLARATIVE QUERY over typed nodes. Not static files:
+// regenerated from the graph every time.
 //
-// A doc = sections; a section = a node type + the frontmatter fields to surface,
-// optional filter, empty hint. Honest empty states everywhere (RISK-001).
+// The page head is owned by DocBrowser (DESIGN.md §15: one h1 per view), so this
+// file renders sections only. Entries are rows inside one Surface, never cards.
 
 import { useTypedNodes } from "../hooks/useTypedNodes";
 import { fmString, fmList, fmFilled, nodeExcerpt, type GraphNode } from "../lib/node";
-import { ProofLevelBadge, EvidenceStateBadge } from "../atoms";
-import { Badge } from "../components/ui/badge";
-import { Card, CardContent } from "../components/ui/card";
+import { EvidenceStateBadge, ProofLevelBadge, NodeTypeChip } from "../atoms";
+import { facetHref } from "./FacetPage";
+import { RegionTitle, Row, RowActions, RowBody, RowGrid, Surface, Unset } from "../components/ui/surface";
+import { LoadingBlock, EmptyBlock } from "../components/ui/async";
 
 export interface FieldSpec {
   key: string;
@@ -26,7 +26,7 @@ export interface DocSectionSpec {
    *  the section is scoped to that case. */
   caseField?: string;
   emptyHint?: string;
-  /** Show proof_level / status badges if present on the node. */
+  /** Show proof_level / status chips if present on the node. */
   badges?: boolean;
 }
 
@@ -39,86 +39,140 @@ export interface DocSpec {
 }
 
 export function GeneratedDoc({ spec, caseId }: { spec: DocSpec; caseId?: string | null }) {
-  const scoped = caseId ? `${spec.title} · scoped to selected case where the type carries a \`case\` field` : spec.intro;
   return (
-    <div>
-      <div className="mb-5">
-        <div className="text-[10px] font-mono font-semibold uppercase tracking-[0.1em] text-muted-ink">
-          {spec.kicker} · GENERATED
-        </div>
-        <h1 className="text-2xl font-normal tracking-tight" style={{ fontFamily: "var(--font-display)" }}>{spec.title}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{scoped}</p>
-      </div>
-      <div className="flex flex-col gap-5">
-        {spec.sections.map((s) => <DocSection key={s.label} spec={s} caseId={caseId} />)}
-      </div>
+    <div className="flex flex-col gap-5">
+      {spec.sections.map((s) => (
+        <DocSection key={s.label} spec={s} caseId={caseId} />
+      ))}
     </div>
   );
 }
 
 function DocSection({ spec, caseId }: { spec: DocSectionSpec; caseId?: string | null }) {
-  const { nodes, loading } = useTypedNodes(spec.nodeType);
+  const { nodes, loading, error, reload } = useTypedNodes(spec.nodeType);
   const filtered = nodes.filter((n) => {
     if (spec.filter && !spec.filter(n)) return false;
-    // Case-scoping: only where the section declares a caseField.
     if (caseId && spec.caseField && fmString(n, spec.caseField) !== caseId) return false;
     return true;
   });
 
+  if (loading) return <LoadingBlock label={spec.label.toLowerCase()} rows={2} />;
+  if (error) {
+    return (
+      <EmptyBlock
+        noun={spec.label.toLowerCase()}
+        hint="The server did not respond. This section is unread, not empty. Start the local server and reload."
+        action={
+          <button
+            onClick={reload}
+            className="t-body text-primary underline-offset-4 hover:underline"
+          >
+            Retry
+          </button>
+        }
+      />
+    );
+  }
+
+  if (filtered.length === 0) {
+    return (
+      <EmptyBlock
+        noun={spec.label.toLowerCase()}
+        hint={
+          spec.emptyHint
+            ? `To fill this in: ${spec.emptyHint}.`
+            : undefined
+        }
+      />
+    );
+  }
+
   return (
     <section>
-      <div className="mb-2 flex items-baseline gap-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-ink">{spec.label}</h2>
-        <span className="font-mono text-[11px] text-faint">{filtered.length}</span>
-      </div>
-      {loading ? (
-        <p className="text-sm text-muted-ink">Loading…</p>
-      ) : filtered.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No {spec.label.toLowerCase()} yet{spec.emptyHint ? ` — ${spec.emptyHint}` : ""}.
-        </p>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {filtered.map((n) => <DocCard key={n.id} node={n} spec={spec} />)}
-        </div>
-      )}
+      <RegionTitle count={filtered.length} className="mb-2">
+        {spec.label}
+      </RegionTitle>
+      <Surface className="min-w-0">
+        {filtered.map((n) => (
+          <DocRow key={n.id} node={n} spec={spec} />
+        ))}
+      </Surface>
     </section>
   );
 }
 
-function DocCard({ node, spec }: { node: GraphNode; spec: DocSectionSpec }) {
+function DocRow({ node, spec }: { node: GraphNode; spec: DocSectionSpec }) {
   const showBadges = spec.badges ?? true;
   const proof = fmString(node, "proof_level");
   const status = fmString(node, "status");
+  const excerpt = nodeExcerpt(node, 200);
+
   return (
-    <Card>
-      <CardContent className="py-3">
-        <div className="flex items-start gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">{nodeExcerpt(node, 160) || "—"}</p>
-            {spec.fields && spec.fields.length > 0 && (
-              <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-ink">
-                {spec.fields.map((f) => <FieldRow key={f.key} node={node} field={f} />)}
-              </div>
+    <Row>
+      <RowGrid>
+        <NodeTypeChip type={node.type} to={facetHref("type", node.type)} />
+        <RowBody>
+          <span className="t-body break-any text-foreground">
+            {excerpt === "—" ? (
+              <Unset label={`${node.type} has no text yet`} />
+            ) : (
+              excerpt
             )}
-          </div>
-          {showBadges && (
-            <div className="flex shrink-0 flex-col items-end gap-1">
-              {proof && <ProofLevelBadge level={proof} />}
-              {status && <EvidenceStateBadge state={status} />}
-              <Badge variant="outline" className="font-mono text-[9px]">{node.type}</Badge>
-            </div>
+          </span>
+          {spec.fields && spec.fields.length > 0 && (
+            <span className="mt-1 flex min-w-0 flex-wrap gap-x-3 gap-y-0.5">
+              {spec.fields.map((f) => (
+                <FieldRow key={f.key} node={node} field={f} />
+              ))}
+            </span>
           )}
-        </div>
-      </CardContent>
-    </Card>
+        </RowBody>
+
+        {showBadges && (proof || status) && (
+          <RowActions>
+            {proof && <ProofLevelBadge level={proof} />}
+            {status && <EvidenceStateBadge state={status} />}
+          </RowActions>
+        )}
+      </RowGrid>
+    </Row>
   );
 }
 
+/** A ULID is infrastructure identity, so it is styled as one: short, labelled,
+ *  and carrying the full value in its tooltip rather than filling the column. */
+const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/;
+
 function FieldRow({ node, field }: { node: GraphNode; field: FieldSpec }) {
   const list = fmList(node, field.key);
-  if (list.length > 0) return <span><span className="text-faint">{field.label}:</span> {list.length}</span>;
+  if (list.length > 0) {
+    return (
+      <span className="t-datum text-muted-foreground">
+        <span className="text-faint">{field.label}</span> {list.length}
+      </span>
+    );
+  }
+  if (!fmFilled(node, field.key)) {
+    return (
+      <span className="t-datum">
+        <span className="text-faint">{field.label}</span>{" "}
+        <Unset label={`${field.label} not set`} />
+      </span>
+    );
+  }
   const val = fmString(node, field.key);
-  if (!val || !fmFilled(node, field.key)) return <span><span className="text-faint">{field.label}:</span> <span className="text-faint">—</span></span>;
-  return <span><span className="text-faint">{field.label}:</span> <span className="font-mono">{val.length > 18 ? val.slice(0, 16) + "…" : val}</span></span>;
+  if (ULID.test(val)) {
+    return (
+      <span className="t-datum inline-flex items-center gap-1 text-muted-foreground" title={`${val} (node id)`}>
+        <span className="text-faint">{field.label}</span>
+        <span className="break-any text-muted-ink">{val.slice(0, 8)}</span>
+      </span>
+    );
+  }
+  return (
+    <span className="t-datum text-muted-foreground" title={val}>
+      <span className="text-faint">{field.label}</span>{" "}
+      <span className="break-any">{val.length > 28 ? `${val.slice(0, 26)}…` : val}</span>
+    </span>
+  );
 }

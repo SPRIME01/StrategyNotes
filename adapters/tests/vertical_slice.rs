@@ -12,12 +12,14 @@
 
 use chrono::{Duration, TimeZone, Utc};
 use strategynotes_adapters::{DaynoteEventSink, MarkdownVault, SQLiteIndex, SystemClock, UlidMinter};
-use strategynotes_core::evidence::{EvidenceKind, ProofLevel};
+use strategynotes_core::evidence::{EvidenceItem, EvidenceKind, EvidenceStatus, ProofLevel};
 use strategynotes_core::execution::{Completion, PomoEstimate};
 use strategynotes_core::ics::export_timebox_to_ics;
-use strategynotes_core::ports::DerivedIndex;
+use strategynotes_core::ports::{DerivedIndex, NodeVault};
 use strategynotes_core::services::App;
+use strategynotes_core::strategy::{BetStatus, StrategyBet};
 use strategynotes_core::trace::reachable_via_spine;
+use strategynotes_core::views::TypedView;
 use strategynotes_core::{AttentionMode, EdgeType, GateResult, PomoPattern};
 
 #[test]
@@ -230,4 +232,108 @@ fn index_loss_does_not_break_the_spine() {
         reachable_via_spine(&idx2, chunk.id).unwrap().contains(&ev.id),
         "trace survives index loss (INV-DUR)"
     );
+}
+
+/// SPEC sec 10.2 `POST /evidence/{id}/reject` - SDS-EVID, TST-EVID.
+///
+/// INV-CONTRA: counterevidence and contradiction must never be silently
+/// discarded. A rejection therefore records a decision on the item - it does
+/// not delete it, unlink it, or drop its text. INV-HUMAN: a human decline is a
+/// first-class transition with its own ledger entry, not a silent no-op.
+#[test]
+fn rejecting_evidence_records_the_decision_without_discarding_it() {
+    let tmp = tempfile::tempdir().unwrap();
+    let vault = MarkdownVault::open(tmp.path().join("vault")).unwrap();
+    let sink = DaynoteEventSink::open(tmp.path().join("daynotes")).unwrap();
+    let minter = UlidMinter;
+    let clock = SystemClock;
+    let app = App {
+        vault: &vault,
+        sink: &sink,
+        minter: &minter,
+        clock: &clock,
+    };
+
+    let source = app.add_source("Churn cohort export".into(), None).unwrap();
+    let chunk = app
+        .add_source_chunk(source.id, "cohort 2026-Q3".into(), "churn 11% vs 6%".into())
+        .unwrap();
+    let evidence = app
+        .extract_evidence(
+            chunk.id,
+            "Churn rose to 11% in Q3".into(),
+            ProofLevel::Observed,
+            EvidenceKind::DataPoint,
+        )
+        .unwrap();
+    app.link(chunk.id, evidence.id, EdgeType::Supports).unwrap();
+
+    app.reject_evidence(evidence.id).unwrap();
+
+    // 1. The node survives with its content intact.
+    let node = vault.get(&evidence.id).unwrap().expect("rejection must not delete the node");
+    let item = EvidenceItem::from_node(&node).unwrap();
+    assert_eq!(item.status, EvidenceStatus::Rejected, "status must record the rejection");
+    assert_eq!(item.text, "Churn rose to 11% in Q3", "rejection must not discard the evidence");
+
+    // 2. The typed edge back to its source survives - INV-CONTRA. `link`
+    //    records the edge on the from-node, which here is the chunk.
+    let origin = vault.get(&chunk.id).unwrap().expect("source chunk must survive");
+    let edges = strategynotes_core::format::edges_of(&origin).unwrap();
+    assert!(
+        edges.iter().any(|e| e.to == evidence.id && e.edge_type == EdgeType::Supports),
+        "the supports edge must remain after rejection",
+    );
+
+    // 3. The ledger records the decision - INV-DAY / INV-HUMAN.
+    let today = sink.read(Utc::now().date_naive()).unwrap();
+    assert!(today.contains("rejected"), "daynote must record the rejection, got:\n{today}");
+}
+
+/// Operator decision on OQ-BET-KILL (2026-10-06): add the transition the model
+/// and INV-BET already promise. SDS-STRAT, INV-BET, TST-STRAT, INV-HUMAN.
+///
+/// Non-gated on purpose, symmetric to `reject_evidence`: declining needs no
+/// proof, and inventing a `can_kill_bet` would be policy the spec does not
+/// state. What the invariant demands is that a bet *can* fail and be killed —
+/// with the decision recorded, not silently discarded.
+#[test]
+fn killing_a_bet_records_the_decision_without_discarding_it() {
+    let tmp = tempfile::tempdir().unwrap();
+    let vault = MarkdownVault::open(tmp.path().join("vault")).unwrap();
+    let sink = DaynoteEventSink::open(tmp.path().join("daynotes")).unwrap();
+    let minter = UlidMinter;
+    let clock = SystemClock;
+    let app = App {
+        vault: &vault,
+        sink: &sink,
+        minter: &minter,
+        clock: &clock,
+    };
+
+    let case = app.create_case("GodSpeed founder-market bet".into()).unwrap();
+    let bet = app.draft_bet(case.id, "Win founder-market on speed".into()).unwrap();
+    assert_eq!(bet.status, BetStatus::Draft, "precondition: a freshly drafted bet");
+
+    app.kill_bet(bet.id).unwrap();
+
+    // 1. The bet survives with its history - INV-BET requires it be killable,
+    //    not that killing erase it.
+    let node = vault.get(&bet.id).unwrap().expect("killing must not delete the bet");
+    let killed = StrategyBet::from_node(&node).unwrap();
+    assert_eq!(killed.status, BetStatus::Killed, "status must record the kill");
+    assert_eq!(killed.thesis, "Win founder-market on speed");
+
+    // 2. Killing an unapproved bet is allowed - there is no gate to pass.
+    //    (The gate catalog defines none, so requiring one would invent policy.)
+
+    // 3. Killing twice is a no-op, not a duplicate ledger entry.
+    app.kill_bet(bet.id).unwrap();
+    let again = vault.get(&bet.id).unwrap().unwrap();
+    assert_eq!(StrategyBet::from_node(&again).unwrap().status, BetStatus::Killed);
+
+    // 4. The ledger records it - INV-DAY, INV-HUMAN.
+    let today = sink.read(Utc::now().date_naive()).unwrap();
+    let kills = today.matches("killed").count();
+    assert_eq!(kills, 1, "exactly one killed event, got:\n{today}");
 }

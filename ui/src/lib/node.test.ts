@@ -34,6 +34,16 @@ describe("node accessors", () => {
     expect(nodeTitle(node({}, "# Heading\nrest"))).toBe("Heading");
     expect(nodeTitle(node({}))).toBe("01J..XYZ");
   });
+  it("falls back to the typed text field before the id", () => {
+    // Evidence has `text`, bets have `thesis`, and neither carries a `title`.
+    expect(nodeTitle(node({ text: "Activation speed predicts depth" }))).toBe(
+      "Activation speed predicts depth",
+    );
+    expect(nodeTitle(node({ thesis: "Win founder-market on speed" }))).toBe(
+      "Win founder-market on speed",
+    );
+    expect(nodeTitle(node({ text: "x".repeat(200) }))).toHaveLength(61); // 60 + …
+  });
   it("builds an excerpt preferring typed text fields", () => {
     expect(nodeExcerpt(node({ text: "speed is key" }))).toBe("speed is key");
     expect(nodeExcerpt(node({ statement: "x".repeat(200) }))).toHaveLength(121); // 120 + …

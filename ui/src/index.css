@@ -6,9 +6,25 @@
  * evidence of work (IDs, proof levels, pomos, timestamps, gate labels).
  * Maturity = gates + debt, NEVER percent-complete.
  *
- * Tokens adapted from the Open Design prototype (DESIGN.md) mapped into
- * Tailwind v4 @theme variables + shadcn-compatible semantic names.
+ * Authority: DESIGN.md §2 (color) §3 (typography) §4 (spacing) §11 (motion).
  */
+
+/* ─── Accessibility: the focus ring is part of the product, not a UA default ─── */
+/* NOTE: no primitive may carry `focus-visible:outline-none`. Tailwind's utility
+   layer outranks @layer base, so that class silently deleted this ring on every
+   button and input (found in verification, 2026-10-05). Primitives add a
+   border-colour change as a second cue; they do not suppress the ring. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+  /* Never remove the ring without replacing it. */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+}
 
 @theme {
   /* canvas — deep ink, slightly cool */
@@ -19,14 +35,14 @@
   --color-card: oklch(17.5% 0.007 264);
   --color-card-foreground: oklch(95% 0.003 264);
   --color-surface-1: oklch(17.5% 0.007 264);
-  --color-surface-2: oklch(24% 0.009 264);
-  --color-surface-3: oklch(28% 0.011 264);
-  --color-surface-4: oklch(32% 0.013 264);
+  --color-surface-2: oklch(21% 0.008 264);
+  --color-surface-3: oklch(25.5% 0.01 264);
+  --color-surface-4: oklch(31% 0.012 264);
 
   /* muted / secondary */
-  --color-muted: oklch(24% 0.009 264);
+  --color-muted: oklch(25.5% 0.01 264);
   --color-muted-foreground: oklch(80% 0.008 264);
-  --color-secondary: oklch(20.5% 0.008 264);
+  --color-secondary: oklch(21.5% 0.008 264);
   --color-secondary-foreground: oklch(95% 0.003 264);
 
   /* one accent — calm instrument cyan */
@@ -51,11 +67,20 @@
   --color-gate-info: oklch(76% 0.08 245);
   --color-gate-info-bg: oklch(76% 0.08 245 / 0.10);
   --color-destructive: oklch(70% 0.16 24);
+  --color-destructive-bg: oklch(70% 0.16 24 / 0.10);
 
   /* ink scale */
   --color-fg-dim: oklch(80% 0.008 264);
-  --color-muted-ink: oklch(60% 0.012 264);
-  --color-faint: oklch(44% 0.012 264);
+  --color-muted-ink: oklch(62% 0.012 264);
+  --color-faint: oklch(46% 0.012 264);
+
+  /* node-type hues — stable so one node reads the same in every view */
+  --color-kind-reality: oklch(76% 0.11 152);
+  --color-kind-strategy: oklch(78% 0.11 219);
+  --color-kind-execution: oklch(80% 0.12 78);
+  --color-kind-value: oklch(74% 0.11 305);
+  --color-kind-governance: oklch(72% 0.13 24);
+  --color-kind-plain: oklch(62% 0.012 264);
 
   /* type system */
   --font-sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
@@ -65,19 +90,30 @@
   /* radii */
   --radius: 7px;
   --radius-sm: 4px;
+  --radius-md: 6px;
   --radius-lg: 10px;
   --radius-xl: 14px;
+
+  /* motion — DESIGN.md §11 */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 * {
   border-color: var(--color-border);
 }
 
+html,
+body {
+  /* No horizontal page scroll at any width. clip, never hidden. */
+  overflow-x: clip;
+  max-width: 100%;
+}
+
 body {
   background-color: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-sans);
-  font-size: 14.5px;
+  font-size: 14px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
@@ -87,26 +123,128 @@ body {
   background: oklch(76% 0.11 219 / 0.20);
 }
 
+/* ─── Typography scale (DESIGN.md §3). Five steps; no other sizes exist. ─── */
+
+.t-display {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+.t-section {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.005em;
+}
+.t-row {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.t-body {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.55;
+}
+.t-label {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.t-datum {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
 /* numerics use tabular figures */
 .tabular {
   font-variant-numeric: tabular-nums;
 }
 
-/* ─── Typography utilities (TASK-009) ─── */
-.kicker {
-  font: 600 11px/1.35 var(--font-sans);
-  letter-spacing: 0.01em;
-  color: var(--color-muted-ink);
+/* Prose measure. DESIGN.md §3: body caps at 75ch, editor prose at 68ch. */
+.measure {
+  max-width: 75ch;
 }
-.kicker-uc {
-  font: 600 10.5px/1 var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--color-muted-ink);
+.measure-editor {
+  max-width: 68ch;
 }
-.h1 {
-  font: 500 20px/1.25 var(--font-sans);
-  letter-spacing: -0.01em;
+
+/* Long unbroken strings (ULIDs, URLs, gate codes) must never force a scrollbar. */
+.break-any {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Scroll regions: visible affordance, thin bar. */
+.scroll-region {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-surface-4) transparent;
+  overscroll-behavior: contain;
+}
+.scroll-region::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.scroll-region::-webkit-scrollbar-thumb {
+  background-color: var(--color-surface-4);
+  border-radius: 99px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+.scroll-region::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ─── State transitions (DESIGN.md §11). Motion-cut: only state changes. ─── */
+.t-fast {
+  transition: background-color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out), color 120ms var(--ease-out),
+    opacity 160ms var(--ease-out);
+}
+
+@keyframes sn-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes sn-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.t-fade {
+  animation: sn-fade 160ms var(--ease-out);
+}
+.t-toast-in {
+  animation: sn-toast-in 180ms var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ─── Editor projection decorations (non-destructive; markdown stays canonical) ─── */
@@ -139,13 +277,12 @@ body {
 }
 /* Callout block: a line decoration on `> [!tip|warn|info]` fences. */
 .cm-content .tok-callout {
-  border-left: 3px solid var(--color-border-strong);
   background: var(--color-surface-3);
   padding-left: 6px;
 }
-.cm-content .tok-callout-tip { border-left-color: var(--color-gate-info); background: var(--color-gate-info-bg); }
-.cm-content .tok-callout-warn { border-left-color: var(--color-gate-warn); background: var(--color-gate-warn-bg); }
-.cm-content .tok-callout-info { border-left-color: var(--color-border-strong); background: var(--color-surface-3); }
+.cm-content .tok-callout-tip { background: var(--color-gate-info-bg); }
+.cm-content .tok-callout-warn { background: var(--color-gate-warn-bg); }
+.cm-content .tok-callout-info { background: var(--color-surface-3); }
 
 /* Rendered transclusion: a ((ULID)) replaced inline by the node's content. */
 .cm-content .tok-transclusion {

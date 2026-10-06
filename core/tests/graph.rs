@@ -4,8 +4,9 @@
 
 use std::collections::HashMap;
 
-use strategynotes_core::graph::would_create_placement_cycle;
-use strategynotes_core::node::{NodeType, TypedEdge};
+use strategynotes_core::format::frontmatter_from_yaml_str;
+use strategynotes_core::graph::{referencing_nodes, would_create_placement_cycle};
+use strategynotes_core::node::{Node, NodeType, TypedEdge};
 use strategynotes_core::ports::DerivedIndex;
 use strategynotes_core::{EdgeType, NodeId, Error};
 
@@ -110,4 +111,68 @@ fn independent_branch_does_not_trigger_false_positive() {
         (C, D, EdgeType::Places),
     ]);
     assert!(!would_create_placement_cycle(&idx, id(D), id(B)).unwrap());
+}
+
+// ---------- deletion safety (INV-DUR: never orphan a reference) ----------
+//
+// DELETE /api/notes/:id had no type guard and no reachability check, so one
+// click could remove a strategy object that four other nodes still pointed at.
+// `referencing_nodes` is the pure check behind the refusal.
+
+const T: &str = "01HZX8KQBJ9GYWN3QFVYRXTX05"; // the node we want to delete
+const X: &str = "01HZX8KQBJ9GYWN3QFVYRXTX06"; // a node that points at it
+
+fn node_with(id: &str, fm_yaml: &str) -> Node {
+    Node {
+        id: NodeId::parse(id).unwrap(),
+        ty: NodeType::Note,
+        frontmatter: frontmatter_from_yaml_str(fm_yaml).unwrap(),
+        body: String::new(),
+    }
+}
+
+#[test]
+fn referencing_nodes_finds_a_scalar_reference() {
+    let referrer = node_with(X, &format!("linked_bet: {T}\nobjective: ship\n"));
+    let target = node_with(T, "status: approved\n");
+    let hits = referencing_nodes(&[referrer, target], id(T));
+    assert_eq!(hits, vec![id(X)], "the node naming T must be reported");
+}
+
+#[test]
+fn referencing_nodes_finds_a_reference_inside_a_list() {
+    let referrer = node_with(X, &format!("assumptions:\n  - {T}\n"));
+    let hits = referencing_nodes(&[referrer], id(T));
+    assert_eq!(hits, vec![id(X)]);
+}
+
+#[test]
+fn referencing_nodes_finds_an_edge_target() {
+    let referrer = node_with(
+        X,
+        &format!("edges:\n  - to: {T}\n    type: derives_from\n    status: active\n"),
+    );
+    let hits = referencing_nodes(&[referrer], id(T));
+    assert_eq!(hits, vec![id(X)], "typed edges are frontmatter too (INV-EDGE)");
+}
+
+#[test]
+fn referencing_nodes_returns_nothing_when_unreferenced() {
+    let other = node_with(X, "linked_bet: 01HZX8KQBJ9GYWN3QFVYRXTX09\n");
+    let target = node_with(T, "status: draft\n");
+    assert!(referencing_nodes(&[other, target], id(T)).is_empty());
+}
+
+#[test]
+fn referencing_nodes_ignores_the_node_pointing_at_itself() {
+    // Otherwise nothing that mentions its own id could ever be deleted.
+    let self_ref = node_with(T, &format!("case: {T}\n"));
+    assert!(referencing_nodes(&[self_ref], id(T)).is_empty());
+}
+
+#[test]
+fn referencing_nodes_ignores_partial_ulid_matches() {
+    // "01HZX...X05" must not match a longer token that merely starts with it.
+    let referrer = node_with(X, "note: 01HZX8KQBJ9GYWN3QFVYRXTX05EXTRA\n");
+    assert!(referencing_nodes(&[referrer], id(T)).is_empty());
 }

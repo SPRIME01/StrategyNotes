@@ -128,7 +128,39 @@ impl<'a> App<'a> {
     }
 
     /// Delete a node from the vault.
+    ///
+    /// Refuses while any other node still names this one in its frontmatter.
+    /// INV-DUR: the vault is not in git and the SQLite index is disposable by
+    /// design, so a dangling ULID is unrecoverable — the reference has to go
+    /// first. This is what stops `DELETE /api/notes/:id` from eating a strategy
+    /// bet that two work packages, a claim and a note still point at.
     pub fn delete_note(&self, id: NodeId) -> Result<(), Error> {
+        let nodes = self.vault.all()?;
+        let ref_ids: std::collections::HashSet<NodeId> =
+            crate::graph::referencing_nodes(&nodes, id).into_iter().collect();
+        if !ref_ids.is_empty() {
+            // Name the nodes, not their ULIDs: this message is read by a person
+            // in a toast, and "linked from Red-team the speed thesis" tells them
+            // where to go. ULIDs tell them nothing.
+            let label = |n: &crate::node::Node| match n.frontmatter.get("title").and_then(|v| v.as_str()) {
+                Some(t) if !t.is_empty() => t.to_string(),
+                _ => n.id.to_lexical(),
+            };
+            let target = self
+                .vault
+                .get(&id)?
+                .as_ref()
+                .map(label)
+                .unwrap_or_else(|| id.to_lexical());
+            let referrers: Vec<&crate::node::Node> =
+                nodes.iter().filter(|n| ref_ids.contains(&n.id)).collect();
+            let names: Vec<String> = referrers.iter().copied().take(3).map(label).collect();
+            return Err(Error::Contract(format!(
+                "cannot delete “{target}”: it is still linked from {} other node(s) ({}) — remove those links first",
+                referrers.len(),
+                names.join(", "),
+            )));
+        }
         self.vault.delete(&id)?;
         self.emit(id, ActivityKind::Modified);
         Ok(())
@@ -315,6 +347,23 @@ impl<'a> App<'a> {
         Ok(result)
     }
 
+    /// Reject an evidence item - SPEC sec 10.2, SDS-EVID, TST-EVID.
+    ///
+    /// No gate: rejecting demands no proof, it declines one. What it must never
+    /// do is discard - INV-CONTRA says counterevidence and contradiction survive
+    /// as first-class records, so the node, its text and its typed edges are all
+    /// left standing. The ledger entry is what makes the decision inspectable.
+    pub fn reject_evidence(&self, id: NodeId) -> Result<EvidenceItem, Error> {
+        let mut e = EvidenceItem::from_node(&self.vault.get(&id)?.ok_or(Error::NotFound(id.to_string()))?)?;
+        if e.status == EvidenceStatus::Rejected {
+            return Ok(e);
+        }
+        e.status = EvidenceStatus::Rejected;
+        self.put(&e)?;
+        self.emit(id, ActivityKind::Rejected);
+        Ok(e)
+    }
+
     // ---- claims ----
 
     pub fn create_claim(
@@ -378,6 +427,24 @@ impl<'a> App<'a> {
         Ok(result)
     }
 
+    /// Kill a bet - OQ-BET-KILL, operator decision 2026-10-06 (option a).
+    ///
+    /// Non-gated deliberately: SPEC sec 10.2 defines no kill gate and the
+    /// catalog lists none, so requiring proof would invent policy. INV-BET is
+    /// what makes this necessary - a bet that cannot be killed is strategy
+    /// theater. Like `reject_evidence`, it declines rather than approves, so
+    /// the record stays intact and only the status and ledger move.
+    pub fn kill_bet(&self, id: NodeId) -> Result<StrategyBet, Error> {
+        let mut bet = StrategyBet::from_node(&self.vault.get(&id)?.ok_or(Error::NotFound(id.to_string()))?)?;
+        if bet.status == BetStatus::Killed {
+            return Ok(bet);
+        }
+        bet.status = BetStatus::Killed;
+        self.put(&bet)?;
+        self.emit(id, ActivityKind::Killed);
+        Ok(bet)
+    }
+
     // ---- work packages ----
 
     pub fn create_work_package(
@@ -398,6 +465,9 @@ impl<'a> App<'a> {
             exception_policy: None,
             evidence_required: vec![],
             status: crate::execution::WorkStatus::Intent,
+            // PRD-019: no estimate at birth; the planner sets it (INV-TIME not
+            // met yet, which is honest — a new work package is still a wish).
+            pomos: 0,
         };
         self.put(&wp)?;
         self.emit(wp.id, ActivityKind::Created);
